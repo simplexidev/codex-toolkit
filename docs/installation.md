@@ -12,10 +12,11 @@ dotnet tools/AgentTool.cs uninstall
 ```
 
 The installer creates individual symlinks for global instructions, three agents and
-25 skills; --bin adds ~/.local/bin/codex-agent-tool. Add that directory to PATH if needed.
+25 skills; on Unix, --bin adds ~/.local/bin/codex-agent-tool. Add that directory to PATH if needed.
 Unix executable mode is tracked; after extracting a ZIP, chmod +x tools/AgentTool.cs
-before using --bin, or invoke dotnet directly. Windows needs symlink permission/Developer
-Mode; there is no silent copy fallback. A symlink failure stops with recoverable ownership
+before using --bin, or invoke dotnet directly. On Windows, --bin is deliberately unsupported:
+invoke `dotnet <toolkit>\\tools\\AgentTool.cs` directly. Windows still needs symlink permission/Developer
+Mode for instructions and skills; there is no silent copy fallback. A symlink failure stops with recoverable ownership
 metadata for any completed entries. Never run as administrator merely to bypass conflicts.
 
 Conflicts are reported before installation writes. Repeat installs and update are

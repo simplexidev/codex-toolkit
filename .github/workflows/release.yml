@@ -17,6 +17,10 @@ jobs:
           global-json-file: global.json
       - run: dotnet test tests/AgentTool.Tests/AgentTool.Tests.csproj
       - run: dotnet tools/AgentTool.cs validate
+      - name: Verify tag matches packaged identity
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: test "$RELEASE_TAG" = "v$(jq -r .version config/toolkit.json)"
       - run: dotnet tools/AgentTool.cs eval
       - run: dotnet tools/AgentTool.cs release --output artifacts/codex-toolkit.zip
       - run: sha256sum artifacts/codex-toolkit.zip > artifacts/SHA256SUMS

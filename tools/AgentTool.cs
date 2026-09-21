@@ -11,6 +11,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
 
@@ -23,7 +24,8 @@ public static class AgentTool
         codex-agent-tool — deterministic → JEV → Codex
         dotnet tools/AgentTool.cs -- <command> [options]
 
-        install | update | uninstall [--home DIR] [--codex-home DIR] [--dry-run] [--bin]
+        install | update [--home DIR] [--codex-home DIR] [--dry-run] [--bin]
+        uninstall [--home DIR] [--codex-home DIR] [--dry-run]
         doctor
         repo changed-files [--base REF] | locate --query TEXT | health | affected-projects [--base REF]
         git state | prepare-commit | issue-start --issue NUMBER --branch NAME
@@ -54,7 +56,8 @@ public static class AgentTool
             if (c.Flag("help") || c.Words.Count == 0 || c.Words[0] == "help") { Console.WriteLine(Help); return 0; }
             var toolkit = FindToolkit(c.Get("toolkit"));
             var root = Path.GetFullPath(c.Get("root") ?? Environment.CurrentDirectory);
-            var settings = Settings.Load(toolkit);
+            var command = c.Words.FirstOrDefault() == "results" ? string.Join(' ', c.Words.Take(2)) : string.Join(' ', c.Words);
+            var settings = Settings.LoadFor(toolkit, command);
             var result = await Execute(c, toolkit, root, settings);
             var rendered = JsonSerializer.Serialize(result, Json);
             if (rendered.Length > settings.Output.MaxOutputChars)
@@ -66,7 +69,7 @@ public static class AgentTool
             Console.WriteLine(rendered);
             return result.ExitCode;
         }
-        catch (Exception e) when (e is ArgumentException or IOException or UnauthorizedAccessException or InvalidOperationException or JsonException or FormatException or System.Xml.XmlException or System.ComponentModel.Win32Exception)
+        catch (Exception e) when (e is ArgumentException or IOException or UnauthorizedAccessException or InvalidOperationException or PlatformNotSupportedException or JsonException or FormatException or System.Xml.XmlException or System.ComponentModel.Win32Exception)
         {
             Console.Error.WriteLine(JsonSerializer.Serialize(new { status = "error", message = Secrets.Redact(e.Message) }, Json));
             return 2;
@@ -123,7 +126,7 @@ public static class AgentTool
             case "repo health":
                 var health = await Projects.Health(root, settings.Health);
                 return new(health.Count == 0 ? "ok" : "findings", health, health.Count == 0 ? 0 : 1);
-            case "github pr-status": return await RunArtifact("gh", ["pr", "status", "--json", "currentBranch,createdBy,needsReview"], root, artifacts, settings.Output);
+            case "github pr-status": return await RunArtifact("gh", ["pr", "status", "--json", "headRefName,author,reviewDecision,statusCheckRollup"], root, artifacts, settings.Output);
             case "github review-comments":
                 var pr = c.PositiveInt("pr").ToString(CultureInfo.InvariantCulture);
                 return await RunArtifact("gh", ["api", $"repos/{{owner}}/{{repo}}/pulls/{pr}/comments", "--paginate"], root, artifacts, settings.Output);
@@ -211,7 +214,7 @@ public static class AgentTool
             }
             else if (command == "dotnet api-check")
             {
-                if (!Projects.HasApiChecks(project)) throw new InvalidOperationException("Configure PublicApiAnalyzers or EnablePackageValidation with a baseline first; api-check cannot certify an unconfigured project.");
+                if (!await Projects.HasApiChecks(root, project)) throw new InvalidOperationException("Configure PublicApiAnalyzers or EnablePackageValidation with a baseline first; api-check cannot certify an unconfigured project.");
                 results.Add(await RunArtifact("dotnet", ["pack", project, "-p:EnablePackageValidation=true", "-p:TreatWarningsAsErrors=true"], root, artifacts, settings.Output));
             }
             else
@@ -221,6 +224,12 @@ public static class AgentTool
                 if (command == "dotnet release-verify") steps.Add(["format", project, "--verify-no-changes"]);
                 var isSolution = project.EndsWith(".sln", StringComparison.OrdinalIgnoreCase) || project.EndsWith(".slnx", StringComparison.OrdinalIgnoreCase);
                 if (isSolution || await Projects.IsTest(root, project)) steps.Add(["test", project, "--no-build", "--nologo"]);
+                else if (command == "dotnet release-verify")
+                {
+                    var tests = await Projects.DependentTests(root, project);
+                    if (tests.Length == 0) throw new InvalidOperationException("Release verification cannot establish test coverage for this project. Pass a solution or add a dependent test project.");
+                    steps.AddRange(tests.Select(test => new[] { "test", test, "--nologo" }));
+                }
                 foreach (var step in steps)
                 {
                     var r = await RunArtifact("dotnet", step, root, artifacts, settings.Output); results.Add(r);
@@ -230,7 +239,7 @@ public static class AgentTool
                     results.Add(await Dotnet("dotnet package-audit", c, root, artifacts, settings));
             }
         }
-        return new(results.Any(x => x.ExitCode != 0) ? "failed" : "ok", new { targets, results, scope = command == "dotnet release-verify" ? "restore, build, format, tests where detected, vulnerability audit; API/SBOM/reproducibility gates are separate on-demand skills" : "targeted" }, results.Any(x => x.ExitCode != 0) ? 1 : 0);
+        return new(results.Any(x => x.ExitCode != 0) ? "failed" : "ok", new { targets, results, scope = command == "dotnet release-verify" ? "restore, build, format, established test coverage, vulnerability audit; API/SBOM/reproducibility gates are separate on-demand skills" : "targeted" }, results.Any(x => x.ExitCode != 0) ? 1 : 0);
     }
 
     public static async Task<Result> RunArtifact(string executable, IEnumerable<string> args, string root, string artifacts, OutputSettings limits)
@@ -562,7 +571,7 @@ public static class Projects
     public static string[] Solutions(string root) => SafeFiles.Enumerate(root).Where(x => Path.GetExtension(x) is ".sln" or ".slnx").Order(StringComparer.Ordinal).ToArray();
     public static async Task<JsonNode> Evaluate(string root, string project)
     {
-        var result = await Processes.Run("dotnet", ["msbuild", project, "-nologo", "-getProperty:TargetFramework,TargetFrameworks,IsTestProject,Nullable,ManagePackageVersionsCentrally,Deterministic,EnableNETAnalyzers,RestorePackagesWithLockFile,EnablePackageValidation", "-getItem:ProjectReference,Compile"], root);
+        var result = await Processes.Run("dotnet", ["msbuild", project, "-nologo", "-getProperty:TargetFramework,TargetFrameworks,IsTestProject,Nullable,ManagePackageVersionsCentrally,Deterministic,EnableNETAnalyzers,RestorePackagesWithLockFile,EnablePackageValidation,PackageValidationBaselineVersion", "-getItem:ProjectReference,Compile,PackageReference"], root);
         if (result.ExitCode != 0) throw new InvalidOperationException($"MSBuild evaluation failed for {Path.GetFileName(project)}; graph cannot safely be narrowed.");
         return JsonNode.Parse(result.Output) ?? throw new InvalidOperationException("Empty MSBuild response.");
     }
@@ -592,11 +601,26 @@ public static class Projects
         do { added = false; foreach (var p in projects) if (references[p].Any(selected.Contains)) added |= selected.Add(p); } while (added);
         return new(selected.Order(StringComparer.Ordinal).ToArray(), "Evaluated Compile/ProjectReference graph including transitive dependents.");
     }
-    public static bool HasApiChecks(string path)
+    public static async Task<bool> HasApiChecks(string root, string path)
     {
         if (!path.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase)) return false;
-        var doc = XDocument.Load(path);
-        return doc.Descendants().Any(x => x.Name.LocalName == "PackageReference" && x.Attribute("Include")?.Value == "Microsoft.CodeAnalysis.PublicApiAnalyzers") || doc.Descendants().Any(x => x.Name.LocalName == "PackageValidationBaselineVersion" && !string.IsNullOrWhiteSpace(x.Value));
+        var evaluation = await Evaluate(root, path);
+        var properties = evaluation["Properties"];
+        return string.Equals(properties?["EnablePackageValidation"]?.GetValue<string>(), "true", StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(properties?["PackageValidationBaselineVersion"]?.GetValue<string>())
+            || evaluation["Items"]?["PackageReference"]?.AsArray().Any(item => string.Equals(item?["Identity"]?.GetValue<string>(), "Microsoft.CodeAnalysis.PublicApiAnalyzers", StringComparison.OrdinalIgnoreCase)) == true;
+    }
+    public static async Task<string[]> DependentTests(string root, string project)
+    {
+        var target = Path.GetFullPath(project);
+        var tests = new List<string>();
+        foreach (var candidate in Discover(root))
+        {
+            if (!await IsTest(root, candidate)) continue;
+            var references = (await Evaluate(root, candidate))["Items"]?["ProjectReference"]?.AsArray().Select(x => x?["FullPath"]?.GetValue<string>()).OfType<string>() ?? [];
+            if (references.Any(reference => string.Equals(Path.GetFullPath(reference), target, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))) tests.Add(candidate);
+        }
+        return tests.Order(StringComparer.Ordinal).ToArray();
     }
     public static async Task<List<object>> Health(string root, HealthSettings policy)
     {
@@ -726,8 +750,9 @@ public static class JevCredentials
     }
 }
 
-public record ToolkitSettings { public string[] OptionalTools { get; init; } = ["dotnet-trace", "dotnet-dump", "dotnet-counters", "dotnet-gcdump", "dotnet-monitor"]; }
-public record OutputSettings { public int MaxLines { get; init; } = 12; public int MaxLineLength { get; init; } = 240; public int MaxItems { get; init; } = 30; public int MaxOutputChars { get; init; } = 16000; }
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)] public record ToolkitSettings { public string[] OptionalTools { get; init; } = ["dotnet-trace", "dotnet-dump", "dotnet-counters", "dotnet-gcdump", "dotnet-monitor"]; public string[] EnabledIntegrations { get; init; } = []; public string Version { get; init; } = "0.0.0"; }
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)] public record OutputSettings { public int MaxLines { get; init; } = 12; public int MaxLineLength { get; init; } = 240; public int MaxItems { get; init; } = 30; public int MaxOutputChars { get; init; } = 16000; }
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public record HealthSettings
 {
     public bool RequireNullable { get; init; } = true;
@@ -737,7 +762,7 @@ public record HealthSettings
     public bool RequireLockFiles { get; init; }
     public string[] AllowedFrameworks { get; init; } = ["net10.0"];
 }
-public record JevSettings
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)] public record JevSettings
 {
     public string Mode { get; init; } = "auto";
     public string ApiUrl { get; init; } = "https://api.typesafe.ai/v1/systemone";
@@ -760,7 +785,13 @@ public record Settings(JevSettings Jev, OutputSettings Output, HealthSettings He
     public static Settings Load(string toolkit, Func<string, string?>? env = null)
     {
         env ??= Environment.GetEnvironmentVariable;
-        T Read<T>(string name) where T : new() => JsonSerializer.Deserialize<T>(File.ReadAllText(Path.Combine(toolkit, "config", name + ".json")), AgentTool.Json) ?? throw new ArgumentException("Empty configuration.");
+        T Read<T>(string name) where T : new()
+        {
+            var node = JsonNode.Parse(File.ReadAllText(Path.Combine(toolkit, "config", name + ".json")))?.AsObject() ?? throw new ArgumentException($"Empty configuration: {name}.json");
+            node.Remove("$schema");
+            try { return node.Deserialize<T>(AgentTool.Json) ?? throw new ArgumentException($"Empty configuration: {name}.json"); }
+            catch (JsonException e) { throw new ArgumentException($"Invalid configuration {name}.json: {e.Message}"); }
+        }
         var jev = Read<JevSettings>("jev");
         jev = jev with { Mode = env("JEV_MODE") ?? jev.Mode, ApiUrl = env("TYPESAFE_API_URL") ?? jev.ApiUrl, Model = env("JEV_MODEL") ?? jev.Model, TimeoutSeconds = env("JEV_TIMEOUT_SECONDS") is { } timeout ? int.TryParse(timeout, out var seconds) ? seconds : throw new ArgumentException("Invalid JEV_TIMEOUT_SECONDS.") : jev.TimeoutSeconds };
         jev.Validate();
@@ -768,6 +799,9 @@ public record Settings(JevSettings Jev, OutputSettings Output, HealthSettings He
         if (output.MaxLines is < 1 or > 100 || output.MaxLineLength is < 20 or > 2000 || output.MaxItems is < 1 or > 200 || output.MaxOutputChars is < 1024 or > 131072) throw new ArgumentException("Invalid output limits.");
         return new(jev, output, Read<HealthSettings>("repo-health"), Read<ToolkitSettings>("toolkit"));
     }
+    public static Settings LoadFor(string toolkit, string command)
+        => command is "install" or "update" or "uninstall" or "validate" or "release" or "results init" or "results new" or "results list" or "results latest" or "results context" or "results clean" or "upstream status" or "upstream update"
+            ? new(new(), new(), new(), new()) : Load(toolkit);
 }
 
 public sealed class JevClient
@@ -897,11 +931,23 @@ public static class Installer
     }
     static List<InstallEntry> Plan(string toolkit, string home, string codex, bool bin)
     {
+        if (bin && OperatingSystem.IsWindows()) throw new PlatformNotSupportedException("--bin is not supported on Windows; invoke `dotnet <toolkit>/tools/AgentTool.cs` directly.");
         var entries = new List<InstallEntry> { new(Path.Combine(codex, "AGENTS.md"), Path.Combine(toolkit, "global/AGENTS.md"), false) };
         entries.AddRange(Directory.GetFiles(Path.Combine(toolkit, "agents"), "*.toml").Select(s => new InstallEntry(Path.Combine(codex, "agents", Path.GetFileName(s)), s, false)));
         entries.AddRange(Directory.GetDirectories(Path.Combine(toolkit, "plugins/codex-toolkit/skills")).Select(s => new InstallEntry(Path.Combine(home, ".agents/skills", Path.GetFileName(s)), s, true)));
         if (bin) entries.Add(new(Path.Combine(home, ".local/bin/codex-agent-tool"), Path.Combine(toolkit, "tools/AgentTool.cs"), false));
         return entries;
+    }
+    static bool IsOwnedShape(InstallEntry entry, string toolkit, string home, string codex)
+    {
+        var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        static bool Under(string path, string root, StringComparison comparison) => path.StartsWith(root.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar, comparison);
+        var destination = Path.GetFullPath(entry.Destination); var source = Path.GetFullPath(entry.Source);
+        if (!Under(source, toolkit, comparison)) return false;
+        return destination == Path.Combine(codex, "AGENTS.md") && source == Path.Combine(toolkit, "global", "AGENTS.md") && !entry.Directory
+            || Under(destination, Path.Combine(codex, "agents"), comparison) && destination.EndsWith(".toml", StringComparison.OrdinalIgnoreCase) && !entry.Directory
+            || Under(destination, Path.Combine(home, ".agents", "skills"), comparison) && entry.Directory
+            || destination == Path.Combine(home, ".local", "bin", "codex-agent-tool") && source == Path.Combine(toolkit, "tools", "AgentTool.cs") && !entry.Directory;
     }
     static InstallManifest? Read(string codex)
     {
@@ -919,8 +965,7 @@ public static class Installer
         SafeFiles.NoLinks(codex);
         var manifest = Read(codex);
         if (manifest is not null && (manifest.Toolkit != toolkit || manifest.Home != home || manifest.CodexHome != codex)) throw new IOException("Installation belongs to a different checkout/home; use that checkout to uninstall first.");
-        var allowed = Plan(toolkit, home, codex, true);
-        if (manifest is not null && manifest.Entries.Any(e => !allowed.Contains(e))) throw new IOException("Ownership manifest contains unexpected paths; no changes made.");
+        if (manifest is not null && manifest.Entries.Any(e => !IsOwnedShape(e, toolkit, home, codex))) throw new IOException("Ownership manifest contains unexpected paths; no changes made.");
         var plan = command == "uninstall" ? manifest?.Entries.ToList() ?? [] : Plan(toolkit, home, codex, bin || manifest?.Entries.Any(x => x.Destination == Path.Combine(home, ".local/bin/codex-agent-tool")) == true);
         var conflicts = plan.Where(e => Exists(e.Destination) && (manifest?.Entries.Contains(e) != true || !Matches(e))).Select(e => e.Destination).ToArray();
         if (command != "uninstall" && conflicts.Length > 0) return new("conflict", new { conflicts, changed = false }, 1);
@@ -973,6 +1018,18 @@ public static class Validation
             if (Path.GetExtension(file) == ".json")
                 try { JsonNode.Parse(File.ReadAllText(file)); parsed++; } catch (JsonException) { errors.Add($"Invalid JSON: {file}"); }
         }
+        foreach (var file in Directory.GetFiles(Path.Combine(root, "config"), "*.json").Concat(Directory.GetFiles(Path.Combine(root, "upstream"), "*.json")))
+        {
+            var instance = JsonNode.Parse(File.ReadAllText(file))!;
+            var schemaReference = instance["$schema"]?.GetValue<string>();
+            if (schemaReference is null) { errors.Add($"Missing schema: {Path.GetRelativePath(root, file)}"); continue; }
+            if (!Uri.TryCreate(schemaReference, UriKind.Absolute, out _))
+            {
+                var schemaPath = Path.GetFullPath(schemaReference, Path.GetDirectoryName(file)!);
+                if (!File.Exists(schemaPath)) errors.Add($"Missing schema file: {Path.GetRelativePath(root, file)}");
+                else ValidateSchema(instance, JsonNode.Parse(File.ReadAllText(schemaPath))!, Path.GetRelativePath(root, file), errors);
+            }
+        }
         foreach (var skill in Directory.GetDirectories(Path.Combine(root, "plugins/codex-toolkit/skills")))
         {
             var path = Path.Combine(skill, "SKILL.md");
@@ -980,15 +1037,51 @@ public static class Validation
             var text = File.ReadAllText(path);
             if (!text.StartsWith("---\n", StringComparison.Ordinal) || !text.Contains("\nname: " + Path.GetFileName(skill) + "\n", StringComparison.Ordinal) || !text.Contains("\ndescription: ", StringComparison.Ordinal)) errors.Add($"Invalid skill frontmatter: {skill}");
             if (!File.Exists(Path.Combine(root, "evals", Path.GetFileName(skill), "eval.yaml"))) errors.Add($"Missing evaluation: {skill}");
+            var ui = Path.Combine(skill, "agents", "openai.yaml");
+            if (!File.Exists(ui)) errors.Add($"Missing skill UI metadata: {skill}");
+            else
+            {
+                var uiText = File.ReadAllText(ui); var name = Path.GetFileName(skill);
+                if (!Regex.IsMatch(uiText, @"(?m)^interface:\s*$") || !Regex.IsMatch(uiText, @"(?m)^\s+display_name:\s+\S") || !Regex.IsMatch(uiText, @"(?m)^\s+short_description:\s+\S") || !uiText.Contains("$" + name, StringComparison.Ordinal)) errors.Add($"Invalid skill UI metadata: {skill}");
+            }
+        }
+        var nativeNames = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var native in Directory.GetFiles(Path.Combine(root, "agents"), "*.toml"))
+        {
+            var nativeText = File.ReadAllText(native);
+            var name = Regex.Match(nativeText, "(?m)^name\\s*=\\s*\\\"([^\\\"]+)\\\"$").Groups[1].Value;
+            var model = Regex.Match(nativeText, "(?m)^model\\s*=\\s*\\\"([^\\\"]+)\\\"$").Groups[1].Value;
+            var effort = Regex.Match(nativeText, "(?m)^model_reasoning_effort\\s*=\\s*\\\"([^\\\"]+)\\\"$").Groups[1].Value;
+            if (name.Length == 0 || !nativeNames.Add(name) || model is not ("gpt-5.6-luna" or "gpt-5.6-terra" or "gpt-5.6-sol" or "gpt-6-astra" or "gpt-5.5") || effort is not ("low" or "medium" or "high" or "xhigh" or "max" or "ultra")) errors.Add($"Invalid native agent metadata: {native}");
         }
         var manifest = JsonNode.Parse(File.ReadAllText(Path.Combine(root, "plugins/codex-toolkit/.codex-plugin/plugin.json")))!;
         var mirror = JsonNode.Parse(File.ReadAllText(Path.Combine(root, "plugins/codex-toolkit/plugin.json")))!;
         if (!JsonNode.DeepEquals(manifest, mirror) || manifest["name"]?.GetValue<string>() != "codex-toolkit" || manifest["skills"]?.GetValue<string>() != "./skills/") errors.Add("Plugin identity, mirror or skill path mismatch.");
+        var version = JsonNode.Parse(File.ReadAllText(Path.Combine(root, "config/toolkit.json")))?["version"]?.GetValue<string>();
+        if (string.IsNullOrWhiteSpace(version) || manifest["version"]?.GetValue<string>() != version || mirror["version"]?.GetValue<string>() != version) errors.Add("Toolkit and plugin manifest versions must match.");
         var marketplace = JsonNode.Parse(File.ReadAllText(Path.Combine(root, ".agents/plugins/marketplace.json")))!;
         if (marketplace["plugins"]?[0]?["source"]?["path"]?.GetValue<string>() != "./plugins/codex-toolkit") errors.Add("Marketplace source path mismatch.");
         try { Settings.Load(root, _ => null); } catch (ArgumentException e) { errors.Add(e.Message); }
-        return new(errors.Count == 0 ? "ok" : "failed", new { jsonFiles = parsed, errors, note = "Fast structural validation. Automated tests additionally parse TOML/YAML and validate full JSON Schemas." }, errors.Count == 0 ? 0 : 1);
+        return new(errors.Count == 0 ? "ok" : "failed", new { jsonFiles = parsed, errors, note = "Structural validation includes configuration schemas and release identity." }, errors.Count == 0 ? 0 : 1);
     }
+    static void ValidateSchema(JsonNode instance, JsonNode schema, string file, List<string> errors)
+    {
+        if (schema["type"]?.GetValue<string>() == "object")
+        {
+            if (instance is not JsonObject value) { errors.Add($"Schema type mismatch: {file} must be object."); return; }
+            var properties = schema["properties"]?.AsObject() ?? [];
+            foreach (var required in schema["required"]?.AsArray().Select(x => x!.GetValue<string>()) ?? []) if (!value.ContainsKey(required)) errors.Add($"Schema required key missing: {file}:{required}");
+            if (schema["additionalProperties"]?.GetValue<bool>() == false) foreach (var key in value.Select(x => x.Key)) if (!properties.ContainsKey(key)) errors.Add($"Schema unknown key: {file}:{key}");
+            foreach (var property in properties) if (value[property.Key] is { } child) ValidateSchema(child, property.Value!, file + ":" + property.Key, errors);
+        }
+        else if (schema["type"]?.GetValue<string>() == "array")
+        {
+            if (instance is not JsonArray values) { errors.Add($"Schema type mismatch: {file} must be array."); return; }
+            foreach (var value in values.Where(x => x is not null)) ValidateSchema(value!, schema["items"]!, file + "[]", errors);
+        }
+        else if (schema["type"]?.GetValue<string>() is { } type && !MatchesType(instance, type)) errors.Add($"Schema type mismatch: {file} must be {type}.");
+    }
+    static bool MatchesType(JsonNode node, string type) => type switch { "string" => node is JsonValue v && v.TryGetValue<string>(out _), "boolean" => node is JsonValue v && v.TryGetValue<bool>(out _), "integer" => node is JsonValue v && v.TryGetValue<int>(out _), "number" => node is JsonValue v && v.TryGetValue<double>(out _), _ => true };
 }
 
 public static class Evaluation
@@ -1019,6 +1112,8 @@ public static class Evaluation
             else
             {
                 if (run["success"]?.GetValue<bool>() != true) failures.Add("Correctness failed.");
+                if (run["expectedSatisfied"]?.GetValue<bool>() != true || run["safetySatisfied"]?.GetValue<bool>() != true) failures.Add("Trusted grader must attest expected and safety behavior.");
+                if (string.IsNullOrWhiteSpace(run["revision"]?.GetValue<string>()) || string.IsNullOrWhiteSpace(run["model"]?.GetValue<string>()) || string.IsNullOrWhiteSpace(run["promptHash"]?.GetValue<string>())) failures.Add("Measured run requires revision, model and promptHash provenance.");
                 foreach (var budget in specification["budgets"]!.AsObject())
                     if (run[budget.Key] is null || run[budget.Key]!.GetValue<double>() < 0 || run[budget.Key]!.GetValue<double>() > budget.Value!.GetValue<double>()) failures.Add($"Missing, invalid or exceeded {budget.Key}.");
                 if (run["baseline"] is not JsonObject baseline || baseline["success"]?.GetValue<bool>() != true) failures.Add("Successful baseline required for comparison.");
@@ -1028,6 +1123,6 @@ public static class Evaluation
             failed |= failures.Count > 0;
             outcomes.Add(new { skill = name, passed = failures.Count == 0, failures });
         }
-        return new(failed ? "failed" : "ok", new { outcomes, note = runs is null ? "Offline smoke only; does not claim token savings or agent success. Supply --results for measured regression gates." : "Measured runs checked against correctness and regression budgets." }, failed ? 1 : 0);
+        return new(failed ? "failed" : "ok", new { outcomes, note = runs is null ? "Offline fixture integrity only; it does not claim agent behavior. Supply trusted, attested --results for measured regression gates." : "Attested measured runs checked against correctness, safety, provenance and regression budgets." }, failed ? 1 : 0);
     }
 }
