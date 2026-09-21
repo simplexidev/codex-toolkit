@@ -1,0 +1,6 @@
+interface:
+  display_name: "Reproducible Build"
+  short_description: "Audit or verify deterministic .NET build reproducibility on d..."
+  default_prompt: "Use $reproducible-build for the scoped task and return evidence."
+policy:
+  allow_implicit_invocation: false

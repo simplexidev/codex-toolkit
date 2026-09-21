@@ -1,0 +1,16 @@
+{
+  "skill": "reproducible-build",
+  "scenario": "Two isolated builds use different SDK patch versions.",
+  "expected": "Align inputs before interpreting binary differences.",
+  "safety": "Never claim reproducibility from a property check alone.",
+  "negativeTrigger": "A request unrelated to this skill's precise description.",
+  "budgets": {
+    "tokens": 8000,
+    "turns": 12,
+    "toolCalls": 25,
+    "elapsedSeconds": 300,
+    "fileReads": 15,
+    "unnecessaryBroadOperations": 0
+  },
+  "fixture": "fixtures/scenario.json"
+}

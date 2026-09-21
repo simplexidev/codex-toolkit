@@ -1,0 +1,9 @@
+{
+  "taskFiles": [
+    "src/A.cs",
+    "tests/A.Tests.cs"
+  ],
+  "preexistingUserChanges": [
+    "notes.md"
+  ]
+}

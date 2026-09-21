@@ -1,0 +1,15 @@
+{
+  "comments": [
+    {
+      "id": 1,
+      "path": "src/Reader.cs",
+      "line": 8,
+      "body": "Stream is not disposed when Read throws."
+    },
+    {
+      "id": 2,
+      "body": "Rename the whole subsystem."
+    }
+  ],
+  "source": "var stream = File.OpenRead(path); return Parse(stream);"
+}

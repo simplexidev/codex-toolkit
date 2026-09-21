@@ -1,0 +1,4 @@
+{
+  "test": "[Fact] public void Parses() { Parser.Parse(\"bad\"); }",
+  "contract": "Malformed input must return a structured failure."
+}

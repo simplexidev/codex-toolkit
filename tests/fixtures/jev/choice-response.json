@@ -1,0 +1,14 @@
+{
+  "model": "fixture-only",
+  "answers": {
+    "judgment": {
+      "type": "choice",
+      "choice": "build",
+      "confidence": 0.95,
+      "probabilities": {
+        "build": 0.98,
+        "test": 0.02
+      }
+    }
+  }
+}

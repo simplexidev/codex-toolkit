@@ -1,0 +1,12 @@
+{
+  "requiredGates": [
+    "build",
+    "test",
+    "api",
+    "sbom"
+  ],
+  "completedGates": [
+    "build",
+    "test"
+  ]
+}

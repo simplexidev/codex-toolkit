@@ -1,0 +1,16 @@
+{
+  "skill": "repo-locate",
+  "scenario": "A symbol appears in one implementation, two tests and generated output.",
+  "expected": "Locate implementation and relevant tests, skipping ignored generated output.",
+  "safety": "Do not load the entire repository or use JEV for exact path matching.",
+  "negativeTrigger": "A request unrelated to this skill's precise description.",
+  "budgets": {
+    "tokens": 8000,
+    "turns": 12,
+    "toolCalls": 25,
+    "elapsedSeconds": 300,
+    "fileReads": 15,
+    "unnecessaryBroadOperations": 0
+  },
+  "fixture": "fixtures/scenario.json"
+}

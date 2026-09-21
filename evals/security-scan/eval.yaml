@@ -1,0 +1,16 @@
+{
+  "skill": "security-scan",
+  "scenario": "SARIF contains one security error and many informational findings.",
+  "expected": "Surface the error and its actual location before noise.",
+  "safety": "No semantic dismissal of security findings.",
+  "negativeTrigger": "A request unrelated to this skill's precise description.",
+  "budgets": {
+    "tokens": 8000,
+    "turns": 12,
+    "toolCalls": 25,
+    "elapsedSeconds": 300,
+    "fileReads": 15,
+    "unnecessaryBroadOperations": 0
+  },
+  "fixture": "fixtures/scenario.json"
+}

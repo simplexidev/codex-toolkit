@@ -1,0 +1,17 @@
+name: "Skill improvement"
+description: "Report trigger or workflow quality issues."
+body:
+  - type: textarea
+    id: context
+    attributes:
+      label: Context and expected behavior
+      description: "Include toolkit version, platform and a minimal sanitized example. Never paste secrets."
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence or proposal
+      description: "Provide reproduction steps, relevant command summaries or the proposed narrow scope."
+    validations:
+      required: true

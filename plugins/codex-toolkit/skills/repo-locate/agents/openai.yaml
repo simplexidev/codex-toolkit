@@ -1,0 +1,6 @@
+interface:
+  display_name: "Repo Locate"
+  short_description: "Locate relevant repository files or symbols before broad read..."
+  default_prompt: "Use $repo-locate for the scoped task and return evidence."
+policy:
+  allow_implicit_invocation: true

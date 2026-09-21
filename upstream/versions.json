@@ -1,0 +1,10 @@
+{
+  "$schema": "../schemas/upstream-versions.schema.json",
+  "repositories": [
+    {
+      "repository": "dotnet/skills",
+      "revision": null,
+      "status": "Unpinned reference; upstream update reports HEAD for maintainer review. No source is vendored."
+    }
+  ]
+}

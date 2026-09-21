@@ -1,0 +1,13 @@
+{
+  "query": "build documentation",
+  "candidates": [
+    {
+      "id": "README.md",
+      "text": "Build prerequisites and test commands."
+    },
+    {
+      "id": "art.txt",
+      "text": "Public color palette notes."
+    }
+  ]
+}

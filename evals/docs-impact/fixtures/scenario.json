@@ -1,0 +1,11 @@
+{
+  "changedKey": {
+    "before": "CacheDuration",
+    "after": "CacheTtl"
+  },
+  "references": [
+    "docs/config.md:CacheDuration",
+    "README.md:CacheDuration",
+    "examples/config.json:CacheDuration"
+  ]
+}

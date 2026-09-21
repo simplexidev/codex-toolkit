@@ -1,0 +1,6 @@
+interface:
+  display_name: "Jev Judgment"
+  short_description: "Use bounded semantic Choice, Noul or Score judgment to reduce..."
+  default_prompt: "Use $jev-judgment for the scoped task and return evidence."
+policy:
+  allow_implicit_invocation: true

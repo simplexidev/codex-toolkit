@@ -1,0 +1,6 @@
+interface:
+  display_name: "Architecture Change"
+  short_description: "Plan or review a real change to component boundaries or syste..."
+  default_prompt: "Use $architecture-change for the scoped task and return evidence."
+policy:
+  allow_implicit_invocation: true

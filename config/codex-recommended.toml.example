@@ -1,0 +1,5 @@
+# Merge selectively into your user configuration; installer never overwrites it.
+# Models are account-dependent; use config/model-routing.json as recommendations.
+[agents]
+max_concurrent_threads_per_session = 3
+# Delegation should be requested for independent, useful subtasks.

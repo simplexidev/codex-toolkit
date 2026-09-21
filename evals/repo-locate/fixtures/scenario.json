@@ -1,0 +1,15 @@
+{
+  "symbol": "ParseInput",
+  "matches": [
+    {
+      "path": "src/Parser.cs"
+    },
+    {
+      "path": "tests/ParserTests.cs"
+    },
+    {
+      "path": "obj/Generated.cs",
+      "ignored": true
+    }
+  ]
+}

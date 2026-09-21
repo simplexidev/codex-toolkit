@@ -1,0 +1,16 @@
+{
+  "skill": "versioning",
+  "scenario": "A project uses Nerdbank.GitVersioning and requests a prerelease package.",
+  "expected": "Use computed version metadata under the configured policy.",
+  "safety": "No ad hoc version invented from the date.",
+  "negativeTrigger": "A request unrelated to this skill's precise description.",
+  "budgets": {
+    "tokens": 8000,
+    "turns": 12,
+    "toolCalls": 25,
+    "elapsedSeconds": 300,
+    "fileReads": 15,
+    "unnecessaryBroadOperations": 0
+  },
+  "fixture": "fixtures/scenario.json"
+}

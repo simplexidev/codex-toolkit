@@ -1,0 +1,4 @@
+{
+  "before": "public void Load(long offset);",
+  "after": "public void Load(int offset);"
+}

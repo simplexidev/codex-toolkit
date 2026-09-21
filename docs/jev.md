@@ -1,0 +1,36 @@
+# JEV
+
+The client follows TypeSafe's [HTTP quickstart](https://docs.typesafe.ai/introduction/quickstart):
+POST https://api.typesafe.ai/v1/systemone with bearer authentication, model, state and
+questions. Noul returns probability; Choice selects named criteria; Score uses ordered
+levels. Responses are type/range/distribution checked before use. No live API call is
+part of the tests or bootstrap validation.
+
+Set TYPESAFE_API_KEY outside source control. Optional overrides are documented in
+[configuration](configuration.md). auto and off always preserve normal Codex behavior;
+required reports exit 3 on service failure while still marking the result REVIEW.
+Uncertain valid judgments remain REVIEW. No retries can accidentally multiply billing.
+Redirects are disabled to avoid forwarding credentials to another endpoint.
+
+Create a small sanitized JSON input:
+
+```json
+{"state":"README describes build setup","instructions":"Is this relevant to build documentation?"}
+```
+
+Run dotnet tools/AgentTool.cs jev noul --input safe.json --dry-run.
+To transmit this exact reviewed input, omit --dry-run and add --safe-input. This flag
+asserts caller review of the payload, not a guarantee of automated secret detection.
+Never send .env content, credentials, complete private repositories or oversized excerpts.
+Choice adds a criteria object mapping labels to descriptions. Score adds an ordered
+criteria array. Screen accepts query plus candidates with id and text and returns an
+individual judgment for every candidate. Narrow candidates before screening.
+
+Noul relevance >= .70 is INCLUDE, <= .10 is EXCLUDE, everything else REVIEW.
+Choice/Score require confidence >= .80. Open INCLUDE and REVIEW items. These heuristics
+need task-specific evaluation; never use them for security authorization or exact facts.
+
+Cache hashes include canonical request and endpoint; files contain responses only,
+never requests or keys. Default TTL is 24 hours. Set cacheHours to 0 to disable; remove
+with jev cache-clear. Cache state is ignored and best-effort. Model aliases can move, so
+pin a provider model when repeatability matters. Private answers can still be sensitive.

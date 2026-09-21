@@ -1,0 +1,13 @@
+{
+  "dropFiles": [
+    "App.dll",
+    "Dependency.dll"
+  ],
+  "restoredPackages": [
+    {
+      "id": "Example.Dependency",
+      "version": "1.0.0"
+    }
+  ],
+  "sbom": null
+}

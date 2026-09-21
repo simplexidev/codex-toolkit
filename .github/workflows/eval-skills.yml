@@ -1,0 +1,37 @@
+name: Evaluate skills
+on:
+  workflow_dispatch:
+    inputs:
+      results:
+        description: Optional repository-relative measured-results JSON file
+        required: false
+        type: string
+      skill:
+        description: Optional single skill for measured results
+        required: false
+        type: string
+  schedule:
+    - cron: '41 8 * * 1'
+permissions:
+  contents: read
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - run: dotnet tools/AgentTool.cs eval
+      - name: Compare measured runs when supplied
+        if: inputs.results != '' && inputs.skill != ''
+        env:
+          RESULTS: ${{ inputs.results }}
+          SKILL: ${{ inputs.skill }}
+        run: dotnet tools/AgentTool.cs eval --results "$RESULTS" --skill "$SKILL"
+      - name: Compare complete measured suite
+        if: inputs.results != '' && inputs.skill == ''
+        env:
+          RESULTS: ${{ inputs.results }}
+        run: dotnet tools/AgentTool.cs eval --results "$RESULTS"

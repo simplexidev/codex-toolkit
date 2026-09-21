@@ -1,0 +1,125 @@
+{
+  "$schema": "../schemas/upstream-tools.schema.json",
+  "policy": "Informational references, not an installation lock. No tools are automatically installed. License labels are project-level references; verify package/version notices before redistribution.",
+  "integrations": [
+    {
+      "id": "skill-validator",
+      "repository": "dotnet/skills",
+      "url": "https://github.com/dotnet/skills",
+      "policy": "recommended",
+      "purpose": "Use upstream skill validation/evaluation tooling from a reviewed checkout; command/version evolves.",
+      "license": "MIT"
+    },
+    {
+      "id": "Microsoft.AITools.BinlogMcp",
+      "url": "https://www.nuget.org/packages/Microsoft.AITools.BinlogMcp",
+      "policy": "on-demand",
+      "purpose": "Structured MSBuild binlog inspection; package reference only. Verify source repository and installation instructions before adoption.",
+      "license": "Verify the selected package version before redistribution"
+    },
+    {
+      "id": "PublicApiAnalyzers",
+      "repository": "dotnet/roslyn-analyzers",
+      "url": "https://github.com/dotnet/roslyn-analyzers",
+      "policy": "recommended",
+      "purpose": "Public API baseline enforcement; upstream project locations may evolve.",
+      "license": "MIT"
+    },
+    {
+      "id": "dotnet-diagnostics",
+      "repository": "dotnet/diagnostics",
+      "url": "https://github.com/dotnet/diagnostics",
+      "policy": "on-demand",
+      "purpose": "dotnet-trace, dotnet-dump, dotnet-counters and dotnet-gcdump.",
+      "license": "MIT"
+    },
+    {
+      "id": "dotnet-monitor",
+      "repository": "dotnet/dotnet-monitor",
+      "url": "https://github.com/dotnet/dotnet-monitor",
+      "policy": "on-demand",
+      "purpose": "Managed runtime diagnostic collection service.",
+      "license": "MIT"
+    },
+    {
+      "id": "BenchmarkDotNet",
+      "repository": "dotnet/BenchmarkDotNet",
+      "url": "https://github.com/dotnet/BenchmarkDotNet",
+      "policy": "on-demand",
+      "purpose": "Reproducible .NET microbenchmarks.",
+      "license": "MIT"
+    },
+    {
+      "id": "Nerdbank.GitVersioning",
+      "repository": "dotnet/Nerdbank.GitVersioning",
+      "url": "https://github.com/dotnet/Nerdbank.GitVersioning",
+      "policy": "optional",
+      "purpose": "Git-derived package and assembly versioning.",
+      "license": "MIT"
+    },
+    {
+      "id": "SARIF-SDK",
+      "repository": "microsoft/sarif-sdk",
+      "url": "https://github.com/microsoft/sarif-sdk",
+      "policy": "optional",
+      "purpose": "Full SARIF processing beyond the toolkit summary reader.",
+      "license": "MIT"
+    },
+    {
+      "id": "SBOM-Tool",
+      "repository": "microsoft/sbom-tool",
+      "url": "https://github.com/microsoft/sbom-tool",
+      "policy": "on-demand",
+      "purpose": "Release SBOM generation and validation.",
+      "license": "MIT"
+    },
+    {
+      "id": "DevSkim",
+      "repository": "microsoft/DevSkim",
+      "url": "https://github.com/microsoft/DevSkim",
+      "policy": "on-demand",
+      "purpose": "Security rules and SARIF results.",
+      "license": "MIT"
+    },
+    {
+      "id": "Threading-Analyzers",
+      "repository": "microsoft/vs-threading",
+      "url": "https://github.com/microsoft/vs-threading",
+      "policy": "optional",
+      "purpose": "Microsoft.VisualStudio.Threading.Analyzers for async/threading rules.",
+      "license": "MIT"
+    },
+    {
+      "id": "reproducible-builds",
+      "repository": "dotnet/reproducible-builds",
+      "url": "https://github.com/dotnet/reproducible-builds",
+      "policy": "optional",
+      "purpose": "Deterministic build guidance and tooling.",
+      "license": "MIT"
+    },
+    {
+      "id": "NuGet-audit-validation",
+      "repository": "NuGet/Home",
+      "url": "https://github.com/NuGet/Home",
+      "policy": "recommended",
+      "purpose": "SDK NuGet auditing and package validation; no extra runtime dependency.",
+      "license": "Apache-2.0"
+    },
+    {
+      "id": "Coverlet",
+      "repository": "coverlet-coverage/coverlet",
+      "url": "https://github.com/coverlet-coverage/coverlet",
+      "policy": "optional",
+      "purpose": "Coverage collection for an explicitly selected test platform.",
+      "license": "MIT"
+    },
+    {
+      "id": "Stryker.NET",
+      "repository": "stryker-mutator/stryker-net",
+      "url": "https://github.com/stryker-mutator/stryker-net",
+      "policy": "on-demand",
+      "purpose": "Expensive mutation testing when requested.",
+      "license": "Apache-2.0"
+    }
+  ]
+}

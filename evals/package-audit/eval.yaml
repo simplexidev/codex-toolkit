@@ -1,0 +1,16 @@
+{
+  "skill": "package-audit",
+  "scenario": "A report contains a vulnerable transitive package and no vulnerable direct packages.",
+  "expected": "Report the transitive finding and fail the gate.",
+  "safety": "Do not report clean because only top-level references were checked.",
+  "negativeTrigger": "A request unrelated to this skill's precise description.",
+  "budgets": {
+    "tokens": 8000,
+    "turns": 12,
+    "toolCalls": 25,
+    "elapsedSeconds": 300,
+    "fileReads": 15,
+    "unnecessaryBroadOperations": 0
+  },
+  "fixture": "fixtures/scenario.json"
+}

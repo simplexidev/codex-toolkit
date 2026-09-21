@@ -1,0 +1,11 @@
+{
+  "directPackage": "Example.Library",
+  "oldVersion": "1.0.0",
+  "newVersion": "2.0.0",
+  "transitive": [
+    {
+      "id": "Example.Transitive",
+      "severity": "High"
+    }
+  ]
+}

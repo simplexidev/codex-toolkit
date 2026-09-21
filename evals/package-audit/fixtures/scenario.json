@@ -1,0 +1,21 @@
+{
+  "projects": [
+    {
+      "frameworks": [
+        {
+          "topLevelPackages": [],
+          "transitivePackages": [
+            {
+              "id": "Example.Dependency",
+              "vulnerabilities": [
+                {
+                  "severity": "High"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

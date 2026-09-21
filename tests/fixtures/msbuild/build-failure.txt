@@ -1,0 +1,3 @@
+src/Parser.cs(12,7): error CS1002: ; expected
+Build FAILED.
+1 Error(s)

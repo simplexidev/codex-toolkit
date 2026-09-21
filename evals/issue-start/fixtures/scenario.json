@@ -1,0 +1,12 @@
+{
+  "issue": {
+    "number": 42,
+    "state": "OPEN"
+  },
+  "gitState": {
+    "clean": false,
+    "untracked": [
+      "personal-notes.md"
+    ]
+  }
+}

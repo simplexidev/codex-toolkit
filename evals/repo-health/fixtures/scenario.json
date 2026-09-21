@@ -1,0 +1,10 @@
+{
+  "project": "src/A.csproj",
+  "imports": [
+    "Directory.Build.props"
+  ],
+  "evaluated": {
+    "Nullable": "enable",
+    "Deterministic": "true"
+  }
+}

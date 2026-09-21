@@ -1,0 +1,11 @@
+{
+  "baseline": {
+    "items": 1000,
+    "runtime": "net10.0"
+  },
+  "candidate": {
+    "items": 1000,
+    "runtime": "net10.0"
+  },
+  "measurement": "not yet collected"
+}

@@ -1,0 +1,8 @@
+{
+  "changed": [
+    "src/A.cs"
+  ],
+  "unrelated": [
+    "legacy/B.cs"
+  ]
+}

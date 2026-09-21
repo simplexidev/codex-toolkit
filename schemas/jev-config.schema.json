@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "jev-config",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "mode",
+    "apiUrl",
+    "model",
+    "timeoutSeconds",
+    "maxInputBytes",
+    "maxCandidates",
+    "includeThreshold",
+    "excludeThreshold",
+    "minConfidence",
+    "cacheHours"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "mode": {
+      "enum": [
+        "auto",
+        "off",
+        "required"
+      ]
+    },
+    "apiUrl": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https://"
+    },
+    "model": {
+      "type": "string",
+      "minLength": 1
+    },
+    "timeoutSeconds": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 120
+    },
+    "maxInputBytes": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 65536
+    },
+    "maxCandidates": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100
+    },
+    "includeThreshold": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "excludeThreshold": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "minConfidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "cacheHours": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 720
+    }
+  }
+}

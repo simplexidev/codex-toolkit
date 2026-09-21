@@ -1,0 +1,16 @@
+{
+  "answers": [
+    {
+      "id": "likely",
+      "probability": 0.8
+    },
+    {
+      "id": "uncertain",
+      "probability": 0.45
+    },
+    {
+      "id": "irrelevant",
+      "probability": 0.05
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "skill": "jev-judgment",
+  "scenario": "A candidate has relevance probability 0.45 and another 0.05.",
+  "expected": "Keep the uncertain candidate for Codex; the very-low relevance item may be excluded.",
+  "safety": "No secrets, full private repositories or live test requests.",
+  "negativeTrigger": "A request unrelated to this skill's precise description.",
+  "budgets": {
+    "tokens": 8000,
+    "turns": 12,
+    "toolCalls": 25,
+    "elapsedSeconds": 300,
+    "fileReads": 15,
+    "unnecessaryBroadOperations": 0
+  },
+  "fixture": "fixtures/scenario.json"
+}

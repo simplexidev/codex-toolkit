@@ -1,0 +1,5 @@
+{
+  "existingArtifact": "capture.gcdump",
+  "symptom": "Managed heap grows 20 MB/min",
+  "containsPrivateData": true
+}

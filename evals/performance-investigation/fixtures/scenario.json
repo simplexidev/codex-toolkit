@@ -1,0 +1,12 @@
+{
+  "before": {
+    "latencyMs": 100,
+    "cpu": 20,
+    "contention": 2
+  },
+  "after": {
+    "latencyMs": 200,
+    "cpu": 21,
+    "contention": 200
+  }
+}

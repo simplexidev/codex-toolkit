@@ -1,0 +1,14 @@
+{
+  "changed": [
+    "A/A.cs"
+  ],
+  "references": {
+    "B.Tests": [
+      "A"
+    ],
+    "C": []
+  },
+  "testProjects": [
+    "B.Tests"
+  ]
+}

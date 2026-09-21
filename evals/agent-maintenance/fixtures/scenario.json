@@ -1,0 +1,9 @@
+{
+  "destination": ".agents/skills/repo-locate",
+  "kind": "directory",
+  "ownership": "user",
+  "contents": [
+    "SKILL.md",
+    "notes.md"
+  ]
+}

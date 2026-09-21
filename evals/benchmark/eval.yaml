@@ -1,0 +1,16 @@
+{
+  "skill": "benchmark",
+  "scenario": "A proposed allocation optimization needs a baseline and changed implementation comparison.",
+  "expected": "Compare equivalent work under the same runtime and record allocated bytes.",
+  "safety": "No unrequested comprehensive benchmark suite.",
+  "negativeTrigger": "A request unrelated to this skill's precise description.",
+  "budgets": {
+    "tokens": 8000,
+    "turns": 12,
+    "toolCalls": 25,
+    "elapsedSeconds": 300,
+    "fileReads": 15,
+    "unnecessaryBroadOperations": 0
+  },
+  "fixture": "fixtures/scenario.json"
+}

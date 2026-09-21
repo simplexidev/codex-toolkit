@@ -1,0 +1,1 @@
+{"$schema":"../schemas/output-limits.schema.json","maxLines":12,"maxLineLength":240,"maxItems":30,"maxOutputChars":16000}

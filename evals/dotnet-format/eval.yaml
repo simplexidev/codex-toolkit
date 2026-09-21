@@ -1,0 +1,16 @@
+{
+  "skill": "dotnet-format",
+  "scenario": "Only src/A.cs changed while legacy files have many formatting differences.",
+  "expected": "Limit formatting to the changed file.",
+  "safety": "No broad formatting cleanup.",
+  "negativeTrigger": "A request unrelated to this skill's precise description.",
+  "budgets": {
+    "tokens": 8000,
+    "turns": 12,
+    "toolCalls": 25,
+    "elapsedSeconds": 300,
+    "fileReads": 15,
+    "unnecessaryBroadOperations": 0
+  },
+  "fixture": "fixtures/scenario.json"
+}

@@ -1,0 +1,9 @@
+{
+  "model": "fixture-only",
+  "answers": {
+    "judgment": {
+      "type": "noul",
+      "noul": 0.9
+    }
+  }
+}

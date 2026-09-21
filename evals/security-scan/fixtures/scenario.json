@@ -1,0 +1,16 @@
+{
+  "results": [
+    {
+      "ruleId": "TEST001",
+      "level": "error",
+      "message": "unchecked input",
+      "path": "src/Input.cs",
+      "line": 12
+    },
+    {
+      "ruleId": "TEST002",
+      "level": "note",
+      "message": "info"
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "versionConfig": {
+    "version": "1.2-beta"
+  },
+  "git": {
+    "branch": "main",
+    "height": 7
+  },
+  "versionToolInstalled": true
+}

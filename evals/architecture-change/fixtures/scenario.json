@@ -1,0 +1,10 @@
+{
+  "references": {
+    "Domain": [
+      "Persistence"
+    ],
+    "Persistence": [
+      "Domain"
+    ]
+  }
+}

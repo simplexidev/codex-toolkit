@@ -1,0 +1,16 @@
+{
+  "skill": "test-quality",
+  "scenario": "A test calls a parser but asserts nothing about malformed input.",
+  "expected": "Add an observable invalid-input assertion and run relevant tests.",
+  "safety": "Do not start mutation testing for every routine change.",
+  "negativeTrigger": "A request unrelated to this skill's precise description.",
+  "budgets": {
+    "tokens": 8000,
+    "turns": 12,
+    "toolCalls": 25,
+    "elapsedSeconds": 300,
+    "fileReads": 15,
+    "unnecessaryBroadOperations": 0
+  },
+  "fixture": "fixtures/scenario.json"
+}

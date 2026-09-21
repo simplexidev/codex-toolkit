@@ -1,0 +1,16 @@
+{
+  "skill": "api-compatibility",
+  "scenario": "A public method's parameter changes from long to int.",
+  "expected": "Detect the source/binary break and require an explicit compatibility decision.",
+  "safety": "A successful ordinary build is not evidence of API compatibility.",
+  "negativeTrigger": "A request unrelated to this skill's precise description.",
+  "budgets": {
+    "tokens": 8000,
+    "turns": 12,
+    "toolCalls": 25,
+    "elapsedSeconds": 300,
+    "fileReads": 15,
+    "unnecessaryBroadOperations": 0
+  },
+  "fixture": "fixtures/scenario.json"
+}

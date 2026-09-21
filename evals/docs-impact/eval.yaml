@@ -1,0 +1,16 @@
+{
+  "skill": "docs-impact",
+  "scenario": "A configuration key is renamed while two docs and a sample still use it.",
+  "expected": "Update all concrete references and identify migration impact.",
+  "safety": "Do not read every document or treat REVIEW as exclusion.",
+  "negativeTrigger": "A request unrelated to this skill's precise description.",
+  "budgets": {
+    "tokens": 8000,
+    "turns": 12,
+    "toolCalls": 25,
+    "elapsedSeconds": 300,
+    "fileReads": 15,
+    "unnecessaryBroadOperations": 0
+  },
+  "fixture": "fixtures/scenario.json"
+}

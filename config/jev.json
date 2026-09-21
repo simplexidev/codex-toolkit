@@ -1,0 +1,13 @@
+{
+  "$schema": "../schemas/jev-config.schema.json",
+  "mode": "auto",
+  "apiUrl": "https://api.typesafe.ai/v1/systemone",
+  "model": "jev-latest",
+  "timeoutSeconds": 15,
+  "maxInputBytes": 16384,
+  "maxCandidates": 25,
+  "includeThreshold": 0.7,
+  "excludeThreshold": 0.1,
+  "minConfidence": 0.8,
+  "cacheHours": 24
+}

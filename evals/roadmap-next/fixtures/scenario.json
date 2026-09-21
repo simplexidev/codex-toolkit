@@ -1,0 +1,18 @@
+{
+  "issues": [
+    {
+      "number": 1,
+      "priority": 1,
+      "dependsOn": [
+        2
+      ],
+      "state": "OPEN"
+    },
+    {
+      "number": 2,
+      "priority": 2,
+      "dependsOn": [],
+      "state": "OPEN"
+    }
+  ]
+}

@@ -1,0 +1,1 @@
+{"$schema":"../schemas/repo-health.schema.json","requireNullable":true,"requireCentralPackages":true,"requireDeterministic":true,"requireAnalyzers":true,"requireLockFiles":false,"allowedFrameworks":["net10.0"]}

@@ -1,0 +1,38 @@
+{
+  "$schema": "../schemas/upstream-plugins.schema.json",
+  "policy": "References only. Install selected upstream plugins separately; never copy source into this toolkit. Host-specific agents/LSP are not native Codex agents.",
+  "integrations": [
+    {
+      "id": "dotnet-msbuild",
+      "repository": "dotnet/skills",
+      "url": "https://github.com/dotnet/skills/tree/main/plugins/dotnet-msbuild",
+      "policy": "recommended",
+      "purpose": "Build analysis and MSBuild skills",
+      "license": "MIT"
+    },
+    {
+      "id": "dotnet-test",
+      "repository": "dotnet/skills",
+      "url": "https://github.com/dotnet/skills/tree/main/plugins/dotnet-test",
+      "policy": "recommended",
+      "purpose": "Test platform detection, execution and quality",
+      "license": "MIT"
+    },
+    {
+      "id": "dotnet-diag",
+      "repository": "dotnet/skills",
+      "url": "https://github.com/dotnet/skills/tree/main/plugins/dotnet-diag",
+      "policy": "on-demand",
+      "purpose": "Runtime diagnostics and performance",
+      "license": "MIT"
+    },
+    {
+      "id": "dotnet-advanced",
+      "repository": "dotnet/skills",
+      "url": "https://github.com/dotnet/skills/tree/main/plugins/dotnet-advanced",
+      "policy": "on-demand",
+      "purpose": "Advanced C# and specialized .NET workflows",
+      "license": "MIT"
+    }
+  ]
+}

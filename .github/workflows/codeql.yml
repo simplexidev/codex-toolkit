@@ -1,0 +1,26 @@
+name: CodeQL
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: '17 7 * * 2'
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: csharp
+          build-mode: manual
+      - run: dotnet build tests/AgentTool.Tests/AgentTool.Tests.csproj --no-incremental -p:UseSharedCompilation=false
+      - uses: github/codeql-action/analyze@v3

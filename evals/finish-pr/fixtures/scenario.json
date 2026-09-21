@@ -1,0 +1,9 @@
+{
+  "gitState": {
+    "branch": "feature/fix",
+    "operations": [
+      "CHERRY_PICK_HEAD"
+    ],
+    "clean": false
+  }
+}

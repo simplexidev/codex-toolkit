@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "projects": [
+    {
+      "path": "Example.csproj",
+      "frameworks": [
+        {
+          "framework": "net10.0",
+          "transitivePackages": [
+            {
+              "id": "Example.Dependency",
+              "resolvedVersion": "1.0.0",
+              "vulnerabilities": [
+                {
+                  "severity": "High",
+                  "advisoryurl": "https://example.invalid/advisory/fixture"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+**/bin/
+**/obj/
+.agent-tool/
+TestResults/
+artifacts/
+*.binlog
+*.trx
+*.user
+.env
+.env.*
+!.env.example
+*.key
+*.pem

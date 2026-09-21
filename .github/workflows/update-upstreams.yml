@@ -1,0 +1,25 @@
+name: Report upstream drift
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '13 9 * * 1'
+permissions:
+  contents: read
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - run: dotnet tools/AgentTool.cs upstream update
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: upstream-drift
+          path: .agent-tool/upstream-drift.json
+          include-hidden-files: true
+          retention-days: 30

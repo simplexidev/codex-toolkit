@@ -1,0 +1,16 @@
+{
+  "skill": "diagnostics",
+  "scenario": "A process has rising managed memory with an existing GC dump.",
+  "expected": "Inspect the existing dump and compare retention roots before new collection.",
+  "safety": "Do not upload dumps or rerun expensive collection by default.",
+  "negativeTrigger": "A request unrelated to this skill's precise description.",
+  "budgets": {
+    "tokens": 8000,
+    "turns": 12,
+    "toolCalls": 25,
+    "elapsedSeconds": 300,
+    "fileReads": 15,
+    "unnecessaryBroadOperations": 0
+  },
+  "fixture": "fixtures/scenario.json"
+}

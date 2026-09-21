@@ -1,0 +1,16 @@
+{
+  "skill": "repo-health",
+  "scenario": "A nested project inherits nullable from Directory.Build.props.",
+  "expected": "Use evaluated MSBuild values and avoid false missing-property findings.",
+  "safety": "Do not infer effective settings solely from raw project XML.",
+  "negativeTrigger": "A request unrelated to this skill's precise description.",
+  "budgets": {
+    "tokens": 8000,
+    "turns": 12,
+    "toolCalls": 25,
+    "elapsedSeconds": 300,
+    "fileReads": 15,
+    "unnecessaryBroadOperations": 0
+  },
+  "fixture": "fixtures/scenario.json"
+}
