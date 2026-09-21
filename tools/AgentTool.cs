@@ -35,6 +35,9 @@ public static class AgentTool
         jev screen --input PATH [--dry-run] [--safe-input] | cache-clear
         upstream status | update [--dry-run]
         validate | eval [--skill NAME] [--results PATH] | release --output ZIP
+        results init | new <audit|handoff|review|report> <name>
+        results list [audit|handoff|review|report] [--json] | latest <type> [--json]
+        results context <type> [--json] | clean [--dry-run]
 
         Common: --root DIR (target repository), --toolkit DIR, --json, --help
         JEV input: {"state":"sanitized excerpt","instructions":"bounded question","criteria":...}
@@ -87,7 +90,7 @@ public static class AgentTool
 
     public static async Task<Result> Execute(Cli c, string toolkit, string root, Settings settings)
     {
-        var command = string.Join(' ', c.Words);
+        var command = c.Words.FirstOrDefault() == "results" ? string.Join(' ', c.Words.Take(2)) : string.Join(' ', c.Words);
         c.ValidateCommand(command);
         var artifacts = Path.Combine(root, ".agent-tool");
         switch (command)
@@ -148,6 +151,12 @@ public static class AgentTool
             case "validate": return Validation.Run(toolkit);
             case "eval": return Evaluation.Run(toolkit, c.Get("skill"), c.Get("results"));
             case "release": return Release(toolkit, c.Require("output"));
+            case "results init": Results.RequireWords(c.Words.Skip(2).ToArray(), 0, "Usage: results init."); return Results.Init(root);
+            case "results new": return await Results.New(root, c.Words.Skip(2).ToArray());
+            case "results list": return Results.List(root, c.Words.Skip(2).ToArray());
+            case "results latest": return Results.Latest(root, c.Words.Skip(2).ToArray());
+            case "results context": return Results.Context(root, c.Words.Skip(2).ToArray());
+            case "results clean": Results.RequireWords(c.Words.Skip(2).ToArray(), 0, "Usage: results clean [--dry-run]."); return Results.Clean(root, c.Flag("dry-run"));
             default: throw new ArgumentException("Unknown command. Use --help.");
         }
     }
@@ -320,6 +329,7 @@ public sealed class Cli
             "upstream update" => ["dry-run"],
             "eval" => ["skill", "results"],
             "release" => ["output"],
+            "results clean" => ["dry-run"],
             _ => []
         };
         allowed.UnionWith(specific);
@@ -449,6 +459,93 @@ public static class Git
 }
 public record GitState(string Root, string? Branch, bool Clean, List<string> Operations, string[] Entries);
 
+public static class Results
+{
+    static readonly Dictionary<string, string> Persistent = new(StringComparer.Ordinal) { ["audit"] = "audits", ["handoff"] = "handoffs", ["review"] = "reviews", ["report"] = "reports" };
+    static readonly string[] Directories = ["audits", "handoffs", "reviews", "reports", "evals", "logs", "traces", "sarif", "binlogs", "test-results", "tmp"];
+    static readonly string[] Transient = ["evals/generated", "logs", "traces", "sarif", "binlogs", "test-results", "tmp"];
+    static readonly Regex Name = new("^[a-z0-9]+(?:-[a-z0-9]+)*$", RegexOptions.CultureInvariant);
+    static string Root(string root) => Path.Combine(Path.GetFullPath(root), ".agent-results");
+    static string Type(string value) => Persistent.TryGetValue(value, out var directory) ? directory : throw new ArgumentException("Result type must be audit, handoff, review, or report.");
+    public static void RequireWords(string[] words, int count, string usage) { if (words.Length != count) throw new ArgumentException(usage); }
+    static string SafeName(string name) => Name.IsMatch(name) && name.Length <= 80 ? name : throw new ArgumentException("Result name must be 1-80 lowercase letters, numbers, and single hyphens.");
+    static string Readme => """
+        # Agent results
+
+        Durable handoffs, audits, reviews, and reports live here. Large or transient output belongs in the named transient directories and is ignored. Normal repository discovery excludes this directory; reference an artifact by path when it matters to a later independent chat.
+        """;
+    public static Result Init(string root)
+    {
+        var results = Root(root); SafeFiles.NoLinks(results); Directory.CreateDirectory(results);
+        foreach (var directory in Directories) Directory.CreateDirectory(Path.Combine(results, directory));
+        Directory.CreateDirectory(Path.Combine(results, "evals", "generated"));
+        var readme = Path.Combine(results, "README.md"); var created = !File.Exists(readme);
+        if (created) SafeFiles.Atomic(readme, Readme);
+        return Result.Ok(new { initialized = results, directories = Directories, readmeCreated = created });
+    }
+    public static async Task<Result> New(string root, string[] words)
+    {
+        RequireWords(words, 2, "Usage: results new <audit|handoff|review|report> <name>.");
+        var type = words[0]; var directory = Type(type); var name = SafeName(words[1]); Init(root); var now = DateTimeOffset.UtcNow;
+        var head = (await Git.Require(root, "rev-parse", "HEAD")).Trim(); var branch = (await Processes.Run("git", ["branch", "--show-current"], root)).Output.Trim();
+        var file = Path.Combine(Root(root), directory, $"{now:yyyyMMddTHHmmssZ}-{name}.md"); if (File.Exists(file)) throw new IOException("A result already exists for this timestamp and name; retry.");
+        var title = CultureInfo.InvariantCulture.TextInfo.ToTitleCase(type) + ": " + name.Replace('-', ' ');
+        SafeFiles.Atomic(file, $"""
+            # {title}
+
+            - Time (UTC): {now:O}
+            - HEAD: {head}
+            - Branch: {branch}
+            - Status: draft
+
+            ## Purpose
+
+            ## Findings or summary
+
+            ## Decisions
+
+            ## Unresolved
+
+            ## Follow-up
+
+            ## Artifact paths
+            """);
+        return Result.Ok(new { path = file, type, name, timestampUtc = now, head, branch, status = "draft" });
+    }
+    static ResultFile[] Files(string root, string? type = null)
+    {
+        var results = Root(root); if (!Directory.Exists(results)) return [];
+        var folders = type is null ? Persistent.Select(x => x.Value) : [Type(type)];
+        return folders.SelectMany(folder => Directory.Exists(Path.Combine(results, folder)) ? Directory.EnumerateFiles(Path.Combine(results, folder), "*.md") : [])
+            .Select(ResultFile.From).OrderByDescending(x => x.TimestampUtc).ThenByDescending(x => x.Path, StringComparer.Ordinal).ToArray();
+    }
+    public static Result List(string root, string[] words) { if (words.Length > 1) throw new ArgumentException("Usage: results list [audit|handoff|review|report]."); var files = Files(root, words.FirstOrDefault()); return Result.Ok(new { count = files.Length, results = files }); }
+    public static Result Latest(string root, string[] words) { RequireWords(words, 1, "Usage: results latest <audit|handoff|review|report>."); return Result.Ok(new { result = Files(root, words[0]).FirstOrDefault() }); }
+    public static Result Context(string root, string[] words) { RequireWords(words, 1, "Usage: results context <audit|handoff|review|report>."); var file = Files(root, words[0]).FirstOrDefault(); return Result.Ok(new { result = file is null ? null : new { file.Path, file.Type, file.TimestampUtc, file.Status, carryForward = file.CarryForward } }); }
+    public static Result Clean(string root, bool dryRun)
+    {
+        var results = Root(root); if (!Directory.Exists(results)) return Result.Ok(new { dryRun, removed = 0, paths = Array.Empty<string>() }); SafeFiles.NoLinks(results); var paths = new List<string>();
+        foreach (var directory in Transient) { var target = Path.Combine(results, directory); SafeFiles.NoLinks(target); if (Directory.Exists(target)) paths.AddRange(EnumerateTransient(target)); }
+        if (!dryRun) foreach (var path in paths) File.Delete(path); return Result.Ok(new { dryRun, removed = paths.Count, paths });
+    }
+    static IEnumerable<string> EnumerateTransient(string directory)
+    {
+        foreach (var file in Directory.EnumerateFiles(directory)) if ((File.GetAttributes(file) & FileAttributes.ReparsePoint) == 0) yield return file;
+        foreach (var child in Directory.EnumerateDirectories(directory)) if ((File.GetAttributes(child) & FileAttributes.ReparsePoint) == 0) foreach (var file in EnumerateTransient(child)) yield return file;
+    }
+}
+public record ResultFile(string Path, string Type, DateTimeOffset TimestampUtc, string? Status, string CarryForward)
+{
+    public static ResultFile From(string path)
+    {
+        var stamp = System.IO.Path.GetFileNameWithoutExtension(path).Split('-', 2)[0]; if (!DateTimeOffset.TryParseExact(stamp, "yyyyMMddTHHmmssZ", CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var timestamp)) timestamp = File.GetLastWriteTimeUtc(path);
+        var text = File.ReadAllText(path); var statusMatch = Regex.Match(text, @"(?m)^- Status: (.+)$");
+        var carry = string.Join("\n", Regex.Matches(text, @"(?ms)^## (?:Unresolved|Follow-up)\r?\n(.*?)(?=^## |\z)").SelectMany(x => x.Groups[1].Value.Split('\n')).Select(x => x.Trim()).Where(x => x.Length > 0).Take(8));
+        var directory = System.IO.Path.GetFileName(System.IO.Path.GetDirectoryName(path)!); var type = new Dictionary<string, string> { ["audits"] = "audit", ["handoffs"] = "handoff", ["reviews"] = "review", ["reports"] = "report" }.GetValueOrDefault(directory, directory);
+        return new(path, type, timestamp, statusMatch.Success ? statusMatch.Groups[1].Value : null, carry);
+    }
+}
+
 public static class Projects
 {
     public static string[] Discover(string root) => SafeFiles.Enumerate(root).Where(x => Path.GetExtension(x) is ".csproj" or ".fsproj" or ".vbproj").Order(StringComparer.Ordinal).ToArray();
@@ -516,7 +613,7 @@ public static class SafeFiles
         foreach (var file in Directory.EnumerateFiles(root)) if ((File.GetAttributes(file) & FileAttributes.ReparsePoint) == 0) yield return file;
         foreach (var dir in Directory.EnumerateDirectories(root))
         {
-            if (new[] { ".git", ".agent-tool", "bin", "obj", "node_modules", "artifacts", "TestResults" }.Contains(Path.GetFileName(dir)) || (File.GetAttributes(dir) & FileAttributes.ReparsePoint) != 0) continue;
+            if (new[] { ".git", ".agent-tool", ".agent-results", "bin", "obj", "node_modules", "artifacts", "TestResults" }.Contains(Path.GetFileName(dir)) || (File.GetAttributes(dir) & FileAttributes.ReparsePoint) != 0) continue;
             foreach (var file in Enumerate(dir)) yield return file;
         }
     }

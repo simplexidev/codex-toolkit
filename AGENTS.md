@@ -18,3 +18,5 @@ or recover unfinished operations without authorization. Do not leave an operatio
 unfinished. Never merge a PR without explicit user approval. Installer tests must use
 temporary homes, never the developer's actual Codex configuration. JEV tests use fake
 HTTP responses only; never make a live billable call during validation.
+
+Use durable results only when a later independent chat needs non-obvious state; reference large artifacts by path. Git history is enough for trivial work, and normal repository discovery must not search historical results.

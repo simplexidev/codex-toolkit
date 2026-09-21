@@ -26,12 +26,19 @@ dotnet tools/AgentTool.cs repo affected-projects --base main
 dotnet tools/AgentTool.cs -- dotnet verify --project tests/MyTests.csproj
 dotnet tools/AgentTool.cs -- logs summarize --file build.log
 dotnet tools/AgentTool.cs git prepare-commit
+dotnet tools/AgentTool.cs results init
+dotnet tools/AgentTool.cs results new handoff phase-1
+dotnet tools/AgentTool.cs results context handoff
 dotnet tools/AgentTool.cs help
 ```
 
 Output is compact JSON in both default and --json modes. Full command logs are stored
 in ignored .agent-tool/. The utility never commits, pushes, merges or creates remote
 repositories. Branch creation checks clean Git state and open issue status.
+
+## Durable agent results
+
+`results init` creates `.agent-results/`: durable audits, handoffs, reviews, and reports are tracked; generated evaluations, logs, traces, SARIF, binlogs, test results, and temporary files are ignored. Normal discovery deliberately skips this store. Use it only for non-obvious state that needs to cross independent chats, and link large evidence by path instead of copying it into a handoff.
 
 JEV is optional: set TYPESAFE_API_KEY outside source control, inspect a sanitized input
 with `jev noul --input safe.json --dry-run`, and explicitly mark reviewed input with
