@@ -84,6 +84,8 @@ public static class AgentTool
             if (File.Exists(source)) source = File.ResolveLinkTarget(source, true)?.FullName ?? source;
             for (var parent = Path.GetDirectoryName(source); parent is not null; parent = Path.GetDirectoryName(parent))
                 if (File.Exists(Path.Combine(parent, "config", "toolkit.json"))) { path = parent; break; }
+            for (var parent = Environment.CurrentDirectory; path is null && parent is not null; parent = Directory.GetParent(parent)?.FullName)
+                if (File.Exists(Path.Combine(parent, "config", "toolkit.json"))) { path = parent; break; }
         }
         path ??= Environment.CurrentDirectory;
         path = Path.GetFullPath(path);
