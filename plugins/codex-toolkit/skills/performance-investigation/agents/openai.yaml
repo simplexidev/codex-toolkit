@@ -1,6 +1,6 @@
 interface:
   display_name: "Performance Investigation"
-  short_description: "Investigate an observed .NET latency, CPU, allocation or memo..."
-  default_prompt: "Use $performance-investigation for the scoped task and return evidence."
+  short_description: Investigate an observed .NET latency, CPU, allocation or memory regression.
+  default_prompt: "Use $performance-investigation."
 policy:
   allow_implicit_invocation: true

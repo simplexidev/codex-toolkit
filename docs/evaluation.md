@@ -11,14 +11,14 @@ fields, then supply measured records to eval --results results.json. Each record
 
 ```json
 [{
-  "skill":"repo-locate", "success":true, "tokens":1200, "turns":3,
+  "skill":"test-quality", "success":true, "tokens":1200, "turns":3,
   "toolCalls":5, "elapsedSeconds":20, "fileReads":2,
   "unnecessaryBroadOperations":0,
   "baseline":{"success":true,"tokens":1800}
 }]
 ```
 
-Use --skill repo-locate for that single record. Missing measurements fail. The comparator
+Use --skill test-quality for that single record. Missing measurements fail. The comparator
 checks absolute budgets and a maximum 10% token regression versus a successful baseline.
 Budgets are evaluation thresholds, never live development abort rules. Record provider
 usage rather than guessed tokens. Do not bill model/JEV calls in normal CI.

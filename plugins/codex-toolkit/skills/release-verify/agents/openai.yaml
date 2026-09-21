@@ -1,6 +1,6 @@
 interface:
   display_name: "Release Verify"
-  short_description: "Run explicitly requested release or complete .NET validation."
-  default_prompt: "Use $release-verify for the scoped task and return evidence."
+  short_description: Run explicitly requested release or complete .NET validation.
+  default_prompt: "Use $release-verify."
 policy:
   allow_implicit_invocation: false

@@ -1,6 +1,6 @@
 interface:
   display_name: "Versioning"
-  short_description: "Apply an existing Git-derived .NET versioning policy for a re..."
-  default_prompt: "Use $versioning for the scoped task and return evidence."
+  short_description: Apply an existing Git-derived .NET versioning policy for a release or package change.
+  default_prompt: "Use $versioning."
 policy:
   allow_implicit_invocation: true

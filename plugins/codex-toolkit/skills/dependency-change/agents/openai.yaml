@@ -1,6 +1,6 @@
 interface:
   display_name: "Dependency Change"
-  short_description: "Change .NET package references or central package versions sa..."
-  default_prompt: "Use $dependency-change for the scoped task and return evidence."
+  short_description: Change .NET package references or central package versions safely.
+  default_prompt: "Use $dependency-change."
 policy:
   allow_implicit_invocation: true

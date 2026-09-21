@@ -1,6 +1,6 @@
 interface:
   display_name: "Prepare Commit"
-  short_description: "Check an intended local commit's scope and Git safety."
-  default_prompt: "Use $prepare-commit for the scoped task and return evidence."
+  short_description: Check an intended local commit's scope and Git safety.
+  default_prompt: "Use $prepare-commit."
 policy:
   allow_implicit_invocation: true

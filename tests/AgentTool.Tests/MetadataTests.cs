@@ -55,6 +55,26 @@ public class MetadataTests
             Assert.True(agent.ContainsKey("name")); Assert.True(agent.ContainsKey("description")); Assert.True(agent.ContainsKey("developer_instructions")); Assert.Equal("read-only", agent["sandbox_mode"]);
         }
     }
+    [Fact]
+    public void SkillActivationMetadataStaysNarrowAndCredentialFree()
+    {
+        var yaml = new DeserializerBuilder().Build();
+        Assert.False(Directory.Exists(Path.Combine(Root, "plugins/codex-toolkit/skills/repo-locate")));
+        Assert.False(Directory.Exists(Path.Combine(Root, "evals/repo-locate")));
+        Assert.Equal(new[] { "reviewer.toml" }, Directory.GetFiles(Path.Combine(Root, "agents"), "*.toml").Select(Path.GetFileName).Order());
+        foreach (var skill in Directory.GetDirectories(Path.Combine(Root, "plugins/codex-toolkit/skills")))
+        {
+            var name = Path.GetFileName(skill);
+            var metadata = yaml.Deserialize<Dictionary<string, object>>(File.ReadAllText(Path.Combine(skill, "agents/openai.yaml")));
+            var ui = (Dictionary<object, object>)metadata["interface"];
+            Assert.Equal($"Use ${name}.", ui["default_prompt"]);
+            Assert.DoesNotContain("...", ui["short_description"].ToString());
+            Assert.DoesNotContain("TYPESAFE_API_KEY", File.ReadAllText(Path.Combine(skill, "SKILL.md")));
+            Assert.DoesNotContain("Commands above use", File.ReadAllText(Path.Combine(skill, "SKILL.md")));
+        }
+        Assert.Contains("allow_implicit_invocation: false", File.ReadAllText(Path.Combine(Root, "plugins/codex-toolkit/skills/jev-judgment/agents/openai.yaml")));
+        Assert.Contains("allow_implicit_invocation: false", File.ReadAllText(Path.Combine(Root, "plugins/codex-toolkit/skills/package-audit/agents/openai.yaml")));
+    }
 }
 
 public class RepositoryIntegrityTests

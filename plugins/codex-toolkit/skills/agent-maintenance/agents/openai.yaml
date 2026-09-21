@@ -1,6 +1,6 @@
 interface:
   display_name: "Agent Maintenance"
-  short_description: "Maintain installed toolkit instructions, skills, agents or co..."
-  default_prompt: "Use $agent-maintenance for the scoped task and return evidence."
+  short_description: Maintain installed toolkit instructions, skills, agents or configuration.
+  default_prompt: "Use $agent-maintenance."
 policy:
   allow_implicit_invocation: false

@@ -1,5 +1,5 @@
 {
-  "destination": ".agents/skills/repo-locate",
+  "destination": ".agents/skills/prepare-commit",
   "kind": "directory",
   "ownership": "user",
   "contents": [

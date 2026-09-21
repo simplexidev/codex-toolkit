@@ -1,6 +1,6 @@
 interface:
   display_name: "Issue Start"
-  short_description: "Start work on a specific open GitHub issue with a safe task b..."
-  default_prompt: "Use $issue-start for the scoped task and return evidence."
+  short_description: Start work on a specific open GitHub issue with a safe task branch.
+  default_prompt: "Use $issue-start."
 policy:
   allow_implicit_invocation: false
