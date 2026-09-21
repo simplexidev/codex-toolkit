@@ -177,7 +177,7 @@ public static class AgentTool
         }
         var home = c.Get("home") ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         var codex = c.Get("codex-home") ?? (c.Get("home") is null ? Environment.GetEnvironmentVariable("CODEX_HOME") : null) ?? Path.Combine(home, ".codex");
-        return new(requiredOk ? "ok" : "failed", new { checks, toolkit, codex, skills = Path.Combine(home, ".agents/skills"), installation = Installer.Inspect(codex), jev = new { settings.Jev.Mode, keyConfigured = !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("TYPESAFE_API_KEY")), settings.Jev.Model }, upstream = "Run upstream status for integration policy; listed integrations are not automatically installed.", optionalTools = settings.Toolkit.OptionalTools.Select(t => new { name = t, available = Processes.OnPath(t) }) }, requiredOk ? 0 : 1);
+        return new(requiredOk ? "ok" : "failed", new { checks, toolkit, codex, skills = Path.Combine(home, ".agents/skills"), installation = Installer.Inspect(codex), jev = new { settings.Jev.Mode, credentials = JevCredentials.Status(), settings.Jev.Model }, upstream = "Run upstream status for integration policy; listed integrations are not automatically installed.", optionalTools = settings.Toolkit.OptionalTools.Select(t => new { name = t, available = Processes.OnPath(t) }) }, requiredOk ? 0 : 1);
     }
 
     static async Task<Result> Dotnet(string command, Cli c, string root, string artifacts, Settings settings)
@@ -249,7 +249,7 @@ public static class AgentTool
         var input = JsonNode.Parse(File.ReadAllText(inputPath)) ?? throw new ArgumentException("Empty input.");
         using var handler = new HttpClientHandler { AllowAutoRedirect = false };
         using var http = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(settings.TimeoutSeconds) };
-        var client = new JevClient(http, settings, Environment.GetEnvironmentVariable("TYPESAFE_API_KEY"), Path.Combine(root, ".agent-tool/jev-cache"));
+        var client = new JevClient(http, settings, Path.Combine(root, ".agent-tool/jev-cache"));
         if (kind == "screen")
         {
             var candidates = input["candidates"]?.AsArray() ?? throw new ArgumentException("candidates array required.");
@@ -371,11 +371,21 @@ public sealed class Cli
 public static class Processes
 {
     public static bool OnPath(string name) => (Environment.GetEnvironmentVariable("PATH") ?? "").Split(Path.PathSeparator).Any(p => File.Exists(Path.Combine(p, name)) || OperatingSystem.IsWindows() && File.Exists(Path.Combine(p, name + ".exe")));
-    public static async Task<ProcessResult> Run(string exe, IEnumerable<string> args, string cwd, string? artifact = null, TimeSpan? timeout = null)
+    internal static ProcessStartInfo StartInfo(string exe, IEnumerable<string> args, string cwd)
     {
         var info = new ProcessStartInfo(exe) { WorkingDirectory = cwd, UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = true };
-        foreach (var arg in args) info.ArgumentList.Add(arg);
+        foreach (var arg in args)
+        {
+            if (JevCredentials.Contains(arg)) throw new InvalidOperationException("Refusing to place JEV credentials in child-process arguments.");
+            info.ArgumentList.Add(arg);
+        }
+        info.Environment.Remove(JevCredentials.EnvironmentVariable);
         info.Environment["GIT_TERMINAL_PROMPT"] = "0";
+        return info;
+    }
+    public static async Task<ProcessResult> Run(string exe, IEnumerable<string> args, string cwd, string? artifact = null, TimeSpan? timeout = null)
+    {
+        var info = StartInfo(exe, args, cwd);
         using var process = Process.Start(info) ?? throw new InvalidOperationException($"Could not start {exe}.");
         using var timer = new CancellationTokenSource(timeout ?? TimeSpan.FromSeconds(60));
         using var writer = artifact is null ? null : new StreamWriter(artifact, false, new UTF8Encoding(false));
@@ -681,11 +691,39 @@ public static class Secrets
     const string Pattern = @"(?i)(?:Bearer\s+[A-Za-z0-9._~+/=-]+|(?:api[_-]?key|password|secret|token)\s*[=:]\s*[^\s,;]+|-----BEGIN[^\r\n]*PRIVATE KEY-----|gh[pousr]_[A-Za-z0-9]{20,}|sk-[A-Za-z0-9_-]{16,})";
     public static string Redact(string value)
     {
-        var key = Environment.GetEnvironmentVariable("TYPESAFE_API_KEY");
-        if (!string.IsNullOrEmpty(key)) value = value.Replace(key, "[REDACTED]", StringComparison.Ordinal);
+        value = JevCredentials.Redact(value);
         return Regex.Replace(value, Pattern, "[REDACTED]");
     }
     public static bool LooksSensitive(string value) => !string.Equals(value, Redact(value), StringComparison.Ordinal);
+}
+
+public static class JevCredentials
+{
+    public const string EnvironmentVariable = "TYPESAFE_API_KEY";
+    public static string Status(Func<string, string?>? environment = null)
+    {
+        environment ??= Environment.GetEnvironmentVariable;
+        return string.IsNullOrEmpty(environment(EnvironmentVariable)) ? "JEV credentials: unavailable" : "JEV credentials: configured";
+    }
+    internal static string? Read() => Environment.GetEnvironmentVariable(EnvironmentVariable);
+    internal static bool IsConfigured(Func<string?> source) => !string.IsNullOrEmpty(source());
+    internal static string Redact(string value)
+    {
+        var key = Read();
+        return string.IsNullOrEmpty(key) ? value : value.Replace(key, "[REDACTED]", StringComparison.Ordinal);
+    }
+    internal static bool Contains(string value)
+    {
+        var key = Read();
+        return !string.IsNullOrEmpty(key) && value.Contains(key, StringComparison.Ordinal);
+    }
+    internal static bool Authorize(HttpRequestMessage request, Func<string?> source)
+    {
+        var key = source();
+        if (string.IsNullOrEmpty(key)) return false;
+        try { request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", key); return true; }
+        catch (FormatException) { return false; }
+    }
 }
 
 public record ToolkitSettings { public string[] OptionalTools { get; init; } = ["dotnet-trace", "dotnet-dump", "dotnet-counters", "dotnet-gcdump", "dotnet-monitor"]; }
@@ -732,8 +770,17 @@ public record Settings(JevSettings Jev, OutputSettings Output, HealthSettings He
     }
 }
 
-public sealed class JevClient(HttpClient http, JevSettings settings, string? key, string cacheDirectory)
+public sealed class JevClient
 {
+    readonly HttpClient http;
+    readonly JevSettings settings;
+    readonly string cacheDirectory;
+    readonly Func<string?> credentialSource;
+    public JevClient(HttpClient http, JevSettings settings, string cacheDirectory) : this(http, settings, cacheDirectory, JevCredentials.Read) { }
+    internal JevClient(HttpClient http, JevSettings settings, string cacheDirectory, Func<string?> credentialSource)
+    {
+        this.http = http; this.settings = settings; this.cacheDirectory = cacheDirectory; this.credentialSource = credentialSource;
+    }
     public static JsonObject Request(string kind, string state, string instructions, JsonNode? criteria, string model)
     {
         if (string.IsNullOrWhiteSpace(state) || string.IsNullOrWhiteSpace(instructions)) throw new ArgumentException("state and instructions are required.");
@@ -759,7 +806,7 @@ public sealed class JevClient(HttpClient http, JevSettings settings, string? key
     {
         settings.Validate();
         if (settings.Mode == "off") return Result.Review("JEV disabled.");
-        if (string.IsNullOrEmpty(key)) return Fallback("No API key configured.");
+        if (!JevCredentials.IsConfigured(credentialSource)) return Fallback("JEV credentials unavailable.");
         var body = request.ToJsonString();
         if (Encoding.UTF8.GetByteCount(body) > settings.MaxInputBytes || Secrets.LooksSensitive(body)) return Fallback("Input too large or potentially sensitive.");
         var hash = Hash(request, settings.ApiUrl); var cache = Path.Combine(cacheDirectory, hash + ".json");
@@ -772,7 +819,7 @@ public sealed class JevClient(HttpClient http, JevSettings settings, string? key
                 catch (Exception e) when (e is JsonException or InvalidOperationException or ArgumentException or KeyNotFoundException) { /* Invalid cache is ignored; no guessed decisions. */ }
             }
             using var message = new HttpRequestMessage(HttpMethod.Post, settings.ApiUrl);
-            message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", key);
+            if (!JevCredentials.Authorize(message, credentialSource)) return Fallback("JEV credentials unavailable.");
             message.Content = new StringContent(body, Encoding.UTF8, "application/json");
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(settings.TimeoutSeconds));
             using var response = await http.SendAsync(message, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
@@ -783,13 +830,26 @@ public sealed class JevClient(HttpClient http, JevSettings settings, string? key
             { if (memory.Length + count > 65536) return Fallback("Response too large."); await memory.WriteAsync(block.AsMemory(0, count), timeout.Token); }
             var json = JsonNode.Parse(memory.ToArray()) ?? throw new JsonException();
             var parsed = Parse(json, request, false);
-            if (settings.CacheHours > 0) { try { SafeFiles.Atomic(cache, json.ToJsonString()); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { /* Cache is an optimization only. */ } }
+            if (settings.CacheHours > 0) { try { SafeFiles.Atomic(cache, CacheResponse(json, request).ToJsonString()); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { /* Cache is an optimization only. */ } }
             return parsed;
         }
         catch (Exception e) when (e is HttpRequestException or OperationCanceledException or JsonException or InvalidOperationException or ArgumentException or KeyNotFoundException or IOException or UnauthorizedAccessException)
         { return Fallback("JEV unavailable or invalid response; no candidate discarded."); }
     }
     Result Fallback(string reason) => settings.Mode == "required" ? new("REVIEW", new { reason, fallback = "Codex", requiredFailed = true }, 3) : Result.Review(reason);
+    static JsonObject CacheResponse(JsonNode response, JsonObject request)
+    {
+        var answer = response["answers"]!["judgment"]!; var kind = request["questions"]!["judgment"]!["type"]!.GetValue<string>();
+        var cached = new JsonObject { ["type"] = kind };
+        if (kind == "noul") cached["noul"] = answer["noul"]!.DeepClone();
+        else
+        {
+            cached["confidence"] = answer["confidence"]!.DeepClone();
+            cached["probabilities"] = answer["probabilities"]!.DeepClone();
+            cached[kind] = answer[kind]!.DeepClone();
+        }
+        return new JsonObject { ["answers"] = new JsonObject { ["judgment"] = cached } };
+    }
     public Result Parse(JsonNode response, JsonObject request, bool cached)
     {
         var q = request["questions"]!["judgment"]!; var kind = q["type"]!.GetValue<string>();

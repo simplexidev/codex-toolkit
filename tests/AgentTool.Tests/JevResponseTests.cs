@@ -11,7 +11,7 @@ public class JevResponseTests
     {
         using var repo = new TemporaryGitRepository(); using var handler = new FakeHttpMessageHandler(Fixture(type)); using var http = new HttpClient(handler);
         var criteria = JsonNode.Parse(type == "choice" ? "{\"build\":\"Build failure\",\"test\":\"Test failure\"}" : "[\"irrelevant\",\"possible\",\"relevant\"]");
-        var result = await new JevClient(http, new(), "test-only-value", Path.Combine(repo.Root, "cache")).Judge(JevClient.Request(type, "Public diagnostic summary", "Which category?", criteria, "fixture-only"));
+        var result = await JevClientTests.Client(http, new(), Path.Combine(repo.Root, "cache")).Judge(JevClient.Request(type, "Public diagnostic summary", "Which category?", criteria, "fixture-only"));
         Assert.Equal("ACCEPT", result.Status);
     }
     [Fact]
@@ -19,7 +19,7 @@ public class JevResponseTests
     {
         using var repo = new TemporaryGitRepository(); var response = JsonNode.Parse(Fixture("choice"))!; response["answers"]!["judgment"]!["confidence"] = .3;
         using var handler = new FakeHttpMessageHandler(response.ToJsonString()); using var http = new HttpClient(handler);
-        var result = await new JevClient(http, new(), "test-only-value", Path.Combine(repo.Root, "cache")).Judge(JevClient.Request("choice", "summary", "Category?", JsonNode.Parse("{\"build\":\"Build\",\"test\":\"Test\"}"), "fixture-only"));
+        var result = await JevClientTests.Client(http, new(), Path.Combine(repo.Root, "cache")).Judge(JevClient.Request("choice", "summary", "Category?", JsonNode.Parse("{\"build\":\"Build\",\"test\":\"Test\"}"), "fixture-only"));
         Assert.Equal("REVIEW", result.Status);
     }
     [Fact]
@@ -27,13 +27,13 @@ public class JevResponseTests
     {
         using var handler = new FakeHttpMessageHandler(JevClientTests.Good); using var http = new HttpClient(handler);
         var request = JevClient.Request("noul", new string('a', 20000), "Relevant?", null, "fixture-only");
-        Assert.Equal("REVIEW", (await new JevClient(http, new(), "test-only-value", "/unused").Judge(request)).Status); Assert.Equal(0, handler.Calls);
+        Assert.Equal("REVIEW", (await JevClientTests.Client(http, new(), "/unused").Judge(request)).Status); Assert.Equal(0, handler.Calls);
     }
     [Fact]
     public async Task RequiredFailureHasNonzeroExitAndReviewFallback()
     {
         using var handler = new FakeHttpMessageHandler("") { Timeout = true }; using var http = new HttpClient(handler);
-        var result = await new JevClient(http, new() { Mode = "required" }, "test-only-value", "/unused").Judge(JevClientTests.Request());
+        var result = await JevClientTests.Client(http, new() { Mode = "required" }, "/unused").Judge(JevClientTests.Request());
         Assert.Equal(3, result.ExitCode); Assert.Equal("REVIEW", result.Status);
     }
     [Fact]
@@ -42,6 +42,6 @@ public class JevResponseTests
         using var repo = new TemporaryGitRepository(); var cache = Path.Combine(repo.Root, "cache"); Directory.CreateDirectory(cache);
         var path = Path.Combine(cache, JevClient.Hash(JevClientTests.Request(), new JevSettings().ApiUrl) + ".json"); File.WriteAllText(path, JevClientTests.Good); File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddDays(-2));
         using var handler = new FakeHttpMessageHandler(JevClientTests.Good); using var http = new HttpClient(handler);
-        await new JevClient(http, new(), "test-only-value", cache).Judge(JevClientTests.Request()); Assert.Equal(1, handler.Calls);
+        await JevClientTests.Client(http, new(), cache).Judge(JevClientTests.Request()); Assert.Equal(1, handler.Calls);
     }
 }

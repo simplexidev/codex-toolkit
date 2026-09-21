@@ -40,7 +40,8 @@ repositories. Branch creation checks clean Git state and open issue status.
 
 `results init` creates `.agent-results/`: durable audits, handoffs, reviews, and reports are tracked; generated evaluations, logs, traces, SARIF, binlogs, test results, and temporary files are ignored. Normal discovery deliberately skips this store. Use it only for non-obvious state that needs to cross independent chats, and link large evidence by path instead of copying it into a handoff.
 
-JEV is optional: set TYPESAFE_API_KEY outside source control, inspect a sanitized input
+JEV is optional: inject `TYPESAFE_API_KEY` only into the specific AgentTool process or
+session used for live JEV work; storage and injection remain outside this toolkit. Inspect a sanitized input
 with `jev noul --input safe.json --dry-run`, and explicitly mark reviewed input with
 --safe-input before transmission. Failures/uncertainty return REVIEW for Codex.
 [JEV setup](docs/jev.md) · [Configuration](docs/configuration.md)

@@ -7,7 +7,11 @@ project files. Config/model-routing.json is advisory; native agent TOML selects 
 Enabled integrations are descriptive preferences, not an automatic plugin installer.
 
 JEV environment overrides: TYPESAFE_API_URL (complete HTTPS endpoint), JEV_MODEL,
-JEV_MODE, JEV_TIMEOUT_SECONDS. TYPESAFE_API_KEY is environment-only and never serialized.
+JEV_MODE, JEV_TIMEOUT_SECONDS. `TYPESAFE_API_KEY` is the only secret input: its value is
+confined to the credential boundary and applied only to JEV HTTP authorization. It is
+removed from every child-process environment and is never accepted as a CLI option or
+persisted. Inject it only into the specific live-JEV process or narrowly scoped session;
+storage and injection are external.
 Thresholds, cache lifetime and input limits live in jev.json. Output limits control
 summary lines/items. repo-health.json controls evaluated MSBuild policy.
 

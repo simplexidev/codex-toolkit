@@ -1,4 +1,10 @@
 {
+  "credentials": {
+    "source": "TYPESAFE_API_KEY environment variable",
+    "doctor": "JEV credentials: configured",
+    "childProcessReceivesVariable": false,
+    "liveRequest": false
+  },
   "answers": [
     {
       "id": "likely",

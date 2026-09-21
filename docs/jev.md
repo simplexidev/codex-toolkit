@@ -6,8 +6,13 @@ questions. Noul returns probability; Choice selects named criteria; Score uses o
 levels. Responses are type/range/distribution checked before use. No live API call is
 part of the tests or bootstrap validation.
 
-Set TYPESAFE_API_KEY outside source control. Optional overrides are documented in
-[configuration](configuration.md). auto and off always preserve normal Codex behavior;
+`TYPESAFE_API_KEY` is the only application-level secret input. Deliberately inject it
+into the specific AgentTool process or narrowly scoped terminal session used for live JEV
+work. Secret storage and injection are outside AgentTool and the toolkit. Do not place it
+in arguments, files, JSON, `.env`, shell profiles, `environment.d`, keyrings, desktop
+credential stores, or a desktop-session-wide environment. Optional non-secret overrides
+are documented in [configuration](configuration.md). `doctor` reports only
+`JEV credentials: configured` or `JEV credentials: unavailable`. auto and off always preserve normal Codex behavior;
 required reports exit 3 on service failure while still marking the result REVIEW.
 Uncertain valid judgments remain REVIEW. No retries can accidentally multiply billing.
 Redirects are disabled to avoid forwarding credentials to another endpoint.
@@ -34,3 +39,8 @@ Cache hashes include canonical request and endpoint; files contain responses onl
 never requests or keys. Default TTL is 24 hours. Set cacheHours to 0 to disable; remove
 with jev cache-clear. Cache state is ignored and best-effort. Model aliases can move, so
 pin a provider model when repeatability matters. Private answers can still be sensitive.
+
+Normal GitHub CI is keyless and uses fake HTTP responses. If live validation is added,
+isolate it in a dedicated protected GitHub Environment such as `jev-integration`, expose
+the `TYPESAFE_API_KEY` secret only to that job, and permit only manual dispatch and/or a
+low-frequency trusted schedule. Never expose it to pull requests from forks.
