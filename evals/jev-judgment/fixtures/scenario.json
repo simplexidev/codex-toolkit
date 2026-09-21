@@ -5,6 +5,7 @@
     "childProcessReceivesVariable": false,
     "liveRequest": false
   },
+  "malformedScreenPolicy": "Missing query, id, text, or unique ids keeps every candidate for Codex review.",
   "answers": [
     {
       "id": "likely",

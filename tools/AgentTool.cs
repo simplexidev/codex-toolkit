@@ -255,21 +255,37 @@ public static class AgentTool
         var inputPath = c.Require("input");
         if (Path.GetFileName(inputPath).StartsWith(".env", StringComparison.OrdinalIgnoreCase)) return Result.Review("Sensitive input path refused.");
         if (new FileInfo(inputPath).Length > settings.MaxInputBytes) return Result.Review("Input exceeds configured limit.");
-        var input = JsonNode.Parse(File.ReadAllText(inputPath)) ?? throw new ArgumentException("Empty input.");
+        var input = JsonNode.Parse(File.ReadAllText(inputPath)) as JsonObject;
+        if (input is null)
+        {
+            if (kind == "screen") return Result.Review("Screen input must be an object; no candidate discarded.");
+            throw new ArgumentException("Input object required.");
+        }
         using var handler = new HttpClientHandler { AllowAutoRedirect = false };
         using var http = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(settings.TimeoutSeconds) };
         var client = new JevClient(http, settings, Path.Combine(root, ".agent-tool/jev-cache"));
         if (kind == "screen")
         {
-            var candidates = input["candidates"]?.AsArray() ?? throw new ArgumentException("candidates array required.");
+            if (input["candidates"] is not JsonArray candidates) return Result.Review("Screen candidates array is required; no candidate discarded.");
             if (candidates.Count > settings.MaxCandidates) return Result.Review("Too many candidates; narrow deterministic search first.");
-            var answers = new List<object>(); int exitCode = 0;
+            var query = input["query"] is JsonValue queryValue && queryValue.TryGetValue<string>(out var queryText) ? queryText : null;
+            if (string.IsNullOrWhiteSpace(query)) return Result.Review("Screen query is required; no candidate discarded.");
+            var prepared = new List<(string Id, string Text)>();
             foreach (var candidate in candidates)
             {
-                var request = JevClient.Request("noul", candidate?["text"]?.GetValue<string>() ?? "", $"Is this candidate relevant to: {input["query"]?.GetValue<string>()}", null, settings.Model);
+                if (candidate is not JsonObject item || item["id"] is not JsonValue idValue || !idValue.TryGetValue<string>(out var id) || string.IsNullOrWhiteSpace(id) || item["text"] is not JsonValue textValue || !textValue.TryGetValue<string>(out var text) || string.IsNullOrWhiteSpace(text))
+                    return Result.Review("Every screen candidate requires a non-empty string id and text; no candidate discarded.");
+                prepared.Add((id, text));
+            }
+            if (prepared.Select(candidate => candidate.Id).Distinct(StringComparer.Ordinal).Count() != prepared.Count)
+                return Result.Review("Screen candidate ids must be unique; no candidate discarded.");
+            var answers = new List<object>(); int exitCode = 0;
+            foreach (var candidate in prepared)
+            {
+                var request = JevClient.Request("noul", candidate.Text, $"Is this candidate relevant to: {query}", null, settings.Model);
                 var judgment = Secrets.LooksSensitive(request.ToJsonString()) ? Result.Review("Potential secret detected; request refused.") : c.Flag("dry-run") ? Result.Ok(request) : !c.Flag("safe-input") ? Result.Review("Use --safe-input only after minimizing and reviewing supplied text for external transmission.") : await client.Judge(request);
                 exitCode = Math.Max(exitCode, judgment.ExitCode);
-                answers.Add(new { id = candidate?["id"]?.GetValue<string>(), judgment });
+                answers.Add(new { id = candidate.Id, judgment });
             }
             return new(exitCode == 0 ? "ok" : "REVIEW", answers, exitCode);
         }
@@ -881,6 +897,7 @@ public sealed class JevClient
             cached["confidence"] = answer["confidence"]!.DeepClone();
             cached["probabilities"] = answer["probabilities"]!.DeepClone();
             cached[kind] = answer[kind]!.DeepClone();
+            if (kind == "score") cached["legend"] = answer["legend"]!.DeepClone();
         }
         return new JsonObject { ["answers"] = new JsonObject { ["judgment"] = cached } };
     }
@@ -910,6 +927,8 @@ public sealed class JevClient
         else
         {
             var score = Number("score", expected.Length - 1);
+            var legend = a["legend"]?.AsObject() ?? throw new JsonException("Missing score legend.");
+            if (!expected.Order(StringComparer.Ordinal).SequenceEqual(legend.Select(x => x.Key).Order(StringComparer.Ordinal)) || legend.Any(x => x.Value is not JsonValue value || !value.TryGetValue<string>(out _))) throw new JsonException("Invalid score legend.");
             var weighted = probabilities.Sum(x => int.Parse(x.Key, CultureInfo.InvariantCulture) * x.Value!.GetValue<double>());
             if (Math.Abs(score - weighted) > .02) throw new JsonException("Score and distribution disagree.");
             value = score;

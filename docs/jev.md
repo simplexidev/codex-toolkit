@@ -29,7 +29,9 @@ asserts caller review of the payload, not a guarantee of automated secret detect
 Never send .env content, credentials, complete private repositories or oversized excerpts.
 Choice adds a criteria object mapping labels to descriptions. Score adds an ordered
 criteria array. Screen accepts query plus candidates with id and text and returns an
-individual judgment for every candidate. Narrow candidates before screening.
+individual judgment for every candidate. Query, ids and text must be non-empty strings,
+and ids must be unique; malformed screen input keeps every candidate for review. Narrow
+candidates before screening.
 
 Noul relevance >= .70 is INCLUDE, <= .10 is EXCLUDE, everything else REVIEW.
 Choice/Score require confidence >= .80. Open INCLUDE and REVIEW items. These heuristics
