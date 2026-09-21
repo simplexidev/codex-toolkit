@@ -43,7 +43,7 @@ with jev cache-clear. Cache state is ignored and best-effort. Model aliases can 
 pin a provider model when repeatability matters. Private answers can still be sensitive.
 
 Normal GitHub CI is keyless and uses fake HTTP responses. The optional `Live JEV integration`
-workflow is isolated in the protected `jev-integration` GitHub Environment. Configure its
+workflow is isolated in the dedicated `jev-integration` GitHub Environment. Configure its
 `TYPESAFE_API_KEY` Environment secret in GitHub; the workflow does not create, populate or
 read the value. It is available only to the one synthetic smoke-call step, runs by manual
 dispatch or a weekly trusted schedule, and never runs for pull requests (including forks).

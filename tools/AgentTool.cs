@@ -81,7 +81,7 @@ public static class AgentTool
         var path = explicitRoot ?? Environment.GetEnvironmentVariable("CODEX_TOOLKIT_ROOT");
         if (path is null)
         {
-            source = File.ResolveLinkTarget(source, true)?.FullName ?? source;
+            if (File.Exists(source)) source = File.ResolveLinkTarget(source, true)?.FullName ?? source;
             for (var parent = Path.GetDirectoryName(source); parent is not null; parent = Path.GetDirectoryName(parent))
                 if (File.Exists(Path.Combine(parent, "config", "toolkit.json"))) { path = parent; break; }
         }
