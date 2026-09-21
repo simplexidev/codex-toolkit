@@ -780,7 +780,8 @@ public record HealthSettings
     public bool RequireLockFiles { get; init; }
     public string[] AllowedFrameworks { get; init; } = ["net10.0"];
 }
-[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)] public record JevSettings
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public record JevSettings
 {
     public string Mode { get; init; } = "auto";
     public string ApiUrl { get; init; } = "https://api.typesafe.ai/v1/systemone";
