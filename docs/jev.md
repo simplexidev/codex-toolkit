@@ -42,7 +42,8 @@ never requests or keys. Default TTL is 24 hours. Set cacheHours to 0 to disable;
 with jev cache-clear. Cache state is ignored and best-effort. Model aliases can move, so
 pin a provider model when repeatability matters. Private answers can still be sensitive.
 
-Normal GitHub CI is keyless and uses fake HTTP responses. If live validation is added,
-isolate it in a dedicated protected GitHub Environment such as `jev-integration`, expose
-the `TYPESAFE_API_KEY` secret only to that job, and permit only manual dispatch and/or a
-low-frequency trusted schedule. Never expose it to pull requests from forks.
+Normal GitHub CI is keyless and uses fake HTTP responses. The optional `Live JEV integration`
+workflow is isolated in the protected `jev-integration` GitHub Environment. Configure its
+`TYPESAFE_API_KEY` Environment secret in GitHub; the workflow does not create, populate or
+read the value. It is available only to the one synthetic smoke-call step, runs by manual
+dispatch or a weekly trusted schedule, and never runs for pull requests (including forks).

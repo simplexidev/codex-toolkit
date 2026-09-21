@@ -1,0 +1,28 @@
+name: Live JEV integration
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '23 10 * * 3'
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    environment: jev-integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Send one synthetic, reviewed JEV request
+        env:
+          TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}
+        run: |
+          input="$(mktemp)"
+          trap 'rm -f "$input"' EXIT
+          printf '%s\n' '{"state":"Synthetic CI smoke-check state.","instructions":"Is this a synthetic integration request?"}' > "$input"
+          dotnet tools/AgentTool.cs jev noul --input "$input" --safe-input

@@ -75,6 +75,20 @@ public class MetadataTests
         Assert.Contains("allow_implicit_invocation: false", File.ReadAllText(Path.Combine(Root, "plugins/codex-toolkit/skills/jev-judgment/agents/openai.yaml")));
         Assert.Contains("allow_implicit_invocation: false", File.ReadAllText(Path.Combine(Root, "plugins/codex-toolkit/skills/package-audit/agents/openai.yaml")));
     }
+
+    [Fact]
+    public void LiveJevWorkflowIsManuallyOrLowFrequencyTriggeredAndSecretIsStepScoped()
+    {
+        var workflow = File.ReadAllText(Path.Combine(Root, ".github/workflows/jev-integration.yml"));
+        Assert.Contains("workflow_dispatch:", workflow);
+        Assert.Contains("cron: '23 10 * * 3'", workflow);
+        Assert.DoesNotContain("pull_request:", workflow);
+        Assert.Contains("environment: jev-integration", workflow);
+        Assert.Contains("TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}", workflow);
+        Assert.DoesNotContain("permissions: write-all", workflow);
+        Assert.DoesNotContain("echo $TYPESAFE_API_KEY", workflow);
+        Assert.DoesNotContain("printf '%s\\n' \"$TYPESAFE_API_KEY\"", workflow);
+    }
 }
 
 public class RepositoryIntegrityTests
