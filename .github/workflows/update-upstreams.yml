@@ -17,7 +17,7 @@ jobs:
       - run: dotnet tools/AgentTool.cs upstream update
         env:
           GH_TOKEN: ${{ github.token }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: upstream-drift
           path: .agent-tool/upstream-drift.json
