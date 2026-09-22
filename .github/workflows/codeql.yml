@@ -11,6 +11,7 @@ permissions:
   actions: read
 jobs:
   analyze:
+    if: github.event.repository.private == false
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -18,9 +19,14 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           global-json-file: global.json
-      - uses: github/codeql-action/init@v3
+      - uses: github/codeql-action/init@v4
         with:
           languages: csharp
           build-mode: manual
       - run: dotnet build tests/AgentTool.Tests/AgentTool.Tests.csproj --no-incremental -p:UseSharedCompilation=false
-      - uses: github/codeql-action/analyze@v3
+      - uses: github/codeql-action/analyze@v4
+  unavailable:
+    if: github.event.repository.private
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "CodeQL code scanning is unavailable for this private repository; CI and dependency audit remain required."

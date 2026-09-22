@@ -33,6 +33,23 @@ public class MetadataTests
         }
     }
     [Fact]
+    public void ReleaseIdentityIsOnePointZero()
+    {
+        var config = JsonNode.Parse(File.ReadAllText(Path.Combine(Root, "config/toolkit.json")))!;
+        Assert.Equal("1.0.0", config["version"]!.GetValue<string>());
+        Assert.Equal(0, Validation.Run(Root).ExitCode);
+    }
+    [Fact]
+    public async Task ReleaseArchiveContainsUserFacingMetadataAndExcludesDevelopmentState()
+    {
+        using var repo = new TemporaryGitRepository(); var archive = Path.Combine(repo.Root, "codex-toolkit.zip");
+        var result = await AgentTool.Execute(Cli.Parse(["release", "--output", archive]), Root, Root, Settings.Load(Root));
+        Assert.Equal(0, result.ExitCode);
+        using var zip = System.IO.Compression.ZipFile.OpenRead(archive); var entries = zip.Entries.Select(x => x.FullName).ToArray();
+        Assert.Contains("CHANGELOG.md", entries); Assert.Contains("plugins/codex-toolkit/.codex-plugin/plugin.json", entries);
+        Assert.DoesNotContain(entries, x => x.StartsWith("tests/", StringComparison.Ordinal) || x.StartsWith(".agent-results/", StringComparison.Ordinal) || x.StartsWith("artifacts/", StringComparison.Ordinal));
+    }
+    [Fact]
     public void SkillMetadataAndReferencesExist()
     {
         var yaml = new DeserializerBuilder().Build();
@@ -85,6 +102,7 @@ public class MetadataTests
         Assert.DoesNotContain("pull_request:", workflow);
         Assert.Contains("environment: jev-integration", workflow);
         Assert.Contains("TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}", workflow);
+        Assert.Contains("JEV_MODE: required", workflow);
         Assert.DoesNotContain("permissions: write-all", workflow);
         Assert.DoesNotContain("echo $TYPESAFE_API_KEY", workflow);
         Assert.DoesNotContain("printf '%s\\n' \"$TYPESAFE_API_KEY\"", workflow);

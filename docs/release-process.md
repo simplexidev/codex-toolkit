@@ -6,5 +6,6 @@ authorized; the release workflow packages the source/configuration users need an
 a SHA-256 checksum. It does not include tests, caches or developer tooling.
 
 GitHub CLI creates a draft release for human review. The workflow has write permission
-only for that job. CodeQL remains a separate security gate. Configure repository branch
-protection and maintainers after hosting; no remote/owner identity is invented here.
+only for that job. CodeQL remains a separate security gate where GitHub code scanning is
+available; the workflow reports the private-repository limitation without pretending that
+an upload occurred. Configure repository branch protection and maintainers after hosting.

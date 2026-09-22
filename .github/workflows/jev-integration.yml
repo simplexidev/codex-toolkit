@@ -21,6 +21,7 @@ jobs:
       - name: Send one synthetic, reviewed JEV request
         env:
           TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}
+          JEV_MODE: required
         run: |
           input="$(mktemp)"
           trap 'rm -f "$input"' EXIT

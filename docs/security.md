@@ -14,7 +14,7 @@ heuristic JEV secret check is defense in depth, not a DLP guarantee. Use only sa
 minimal data. Test doubles prevent live billing. Dependency and action updates need review.
 
 The TypeSafe boundary accepts one application secret: `TYPESAFE_API_KEY` from the
-AgentTool environment. AgentTool never prints, logs, serializes, caches, describes, or
+AgentTool environment. AgentTool redacts it at structured terminal and overflow-artifact output boundaries and never logs, caches, describes, or
 passes it in command arguments, and all child processes receive an environment with that
 variable removed. Only the JEV HTTP request path can apply it as bearer authentication.
 Inject it deliberately into the one process or narrow session doing live JEV work;

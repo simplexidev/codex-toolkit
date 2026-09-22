@@ -59,14 +59,7 @@ public static class AgentTool
             var command = c.Words.FirstOrDefault() == "results" ? string.Join(' ', c.Words.Take(2)) : string.Join(' ', c.Words);
             var settings = Settings.LoadFor(toolkit, command);
             var result = await Execute(c, toolkit, root, settings);
-            var rendered = JsonSerializer.Serialize(result, Json);
-            if (rendered.Length > settings.Output.MaxOutputChars)
-            {
-                var report = Path.Combine(root, ".agent-tool", $"result-{Guid.NewGuid():N}.json");
-                SafeFiles.Atomic(report, rendered);
-                rendered = JsonSerializer.Serialize(new { result.Status, result.ExitCode, truncated = true, characters = rendered.Length, artifact = report }, Json);
-            }
-            Console.WriteLine(rendered);
+            Console.WriteLine(Render(result, root, settings.Output));
             return result.ExitCode;
         }
         catch (Exception e) when (e is ArgumentException or IOException or UnauthorizedAccessException or InvalidOperationException or PlatformNotSupportedException or JsonException or FormatException or System.Xml.XmlException or System.ComponentModel.Win32Exception)
@@ -74,6 +67,15 @@ public static class AgentTool
             Console.Error.WriteLine(JsonSerializer.Serialize(new { status = "error", message = Secrets.Redact(e.Message) }, Json));
             return 2;
         }
+    }
+
+    public static string Render(Result result, string root, OutputSettings output)
+    {
+        var rendered = Secrets.RedactJson(JsonSerializer.Serialize(result, Json));
+        if (rendered.Length <= output.MaxOutputChars) return rendered;
+        var report = Path.Combine(root, ".agent-tool", $"result-{Guid.NewGuid():N}.json");
+        SafeFiles.Atomic(report, rendered);
+        return Secrets.RedactJson(JsonSerializer.Serialize(new { result.Status, result.ExitCode, truncated = true, characters = rendered.Length, artifact = report }, Json));
     }
 
     public static string FindToolkit(string? explicitRoot = null, [System.Runtime.CompilerServices.CallerFilePath] string source = "")
@@ -122,8 +124,8 @@ public static class AgentTool
                 return Result.Ok(new { branch, issue });
             case "repo changed-files": return Result.Ok(await Git.Changed(root, c.Get("base")));
             case "repo locate":
-                var files = await Git.Files(root);
-                return Result.Ok(new { matches = files.Where(x => x.Contains(c.Require("query"), StringComparison.OrdinalIgnoreCase)).Take(settings.Output.MaxItems), total = files.Count(x => x.Contains(c.Require("query"), StringComparison.OrdinalIgnoreCase)), scope = "Git tracked + untracked, nonignored path names; use rg for symbols." });
+                var files = (await Git.Files(root)).Where(x => !SafeFiles.IsDiscoveryExcluded(x)).ToArray();
+                return Result.Ok(new { matches = files.Where(x => x.Contains(c.Require("query"), StringComparison.OrdinalIgnoreCase)).Take(settings.Output.MaxItems), total = files.Count(x => x.Contains(c.Require("query"), StringComparison.OrdinalIgnoreCase)), scope = "Git tracked + untracked, nonignored path names excluding the managed result store; use rg for symbols." });
             case "repo affected-projects": return Result.Ok(await Projects.Affected(root, await Git.Changed(root, c.Get("base"))));
             case "repo health":
                 var health = await Projects.Health(root, settings.Health);
@@ -277,6 +279,7 @@ public static class AgentTool
             {
                 if (candidate is not JsonObject item || item["id"] is not JsonValue idValue || !idValue.TryGetValue<string>(out var id) || string.IsNullOrWhiteSpace(id) || item["text"] is not JsonValue textValue || !textValue.TryGetValue<string>(out var text) || string.IsNullOrWhiteSpace(text))
                     return Result.Review("Every screen candidate requires a non-empty string id and text; no candidate discarded.");
+                if (Secrets.LooksSensitive(id)) return Result.Review("Potential secret detected in candidate id; no candidate discarded.");
                 prepared.Add((id, text));
             }
             if (prepared.Select(candidate => candidate.Id).Distinct(StringComparer.Ordinal).Count() != prepared.Count)
@@ -310,7 +313,7 @@ public static class AgentTool
         }
         if (dryRun) return Result.Ok(rows);
         SafeFiles.NoLinks(artifacts); Directory.CreateDirectory(artifacts);
-        var report = Path.Combine(artifacts, "upstream-drift.json"); File.WriteAllText(report, JsonSerializer.Serialize(rows, Json));
+        var report = Path.Combine(artifacts, "upstream-drift.json"); SafeFiles.Atomic(report, JsonSerializer.Serialize(rows, Json));
         return Result.Ok(new { rows, report, policy = "Report only; no downloads, manifest edits or merges." });
     }
 
@@ -320,7 +323,7 @@ public static class AgentTool
         output = Path.GetFullPath(output); Directory.CreateDirectory(Path.GetDirectoryName(output)!);
         using var zip = System.IO.Compression.ZipFile.Open(output, System.IO.Compression.ZipArchiveMode.Create);
         var roots = new[] { "agents", "config", "docs", "evals", "global", "plugins", "schemas", "templates", "tools", "upstream" };
-        foreach (var file in roots.SelectMany(x => SafeFiles.Enumerate(Path.Combine(toolkit, x))).Concat(new[] { "README.md", "LICENSE", "NOTICE.md", "THIRD-PARTY-NOTICES.md", "global.json", ".agents/plugins/marketplace.json" }.Select(x => Path.Combine(toolkit, x))))
+        foreach (var file in roots.SelectMany(x => SafeFiles.Enumerate(Path.Combine(toolkit, x))).Concat(new[] { "README.md", "CHANGELOG.md", "LICENSE", "NOTICE.md", "THIRD-PARTY-NOTICES.md", "global.json", ".agents/plugins/marketplace.json" }.Select(x => Path.Combine(toolkit, x))))
             System.IO.Compression.ZipFileExtensions.CreateEntryFromFile(zip, file, Path.GetRelativePath(toolkit, file).Replace('\\', '/'));
         return Result.Ok(new { archive = output });
     }
@@ -597,8 +600,9 @@ public static class Projects
     public static async Task<Affected> Affected(string root, string[] changed)
     {
         root = Path.GetFullPath(root);
+        changed = changed.Where(x => !SafeFiles.IsDiscoveryExcluded(x)).ToArray();
         var projects = Discover(root);
-        if (changed.Length == 0) return new([], "No changed files.");
+        if (changed.Length == 0) return new([], "No build-relevant changed files.");
         var broad = changed.Any(x => x.EndsWith(".props", StringComparison.OrdinalIgnoreCase) || x.EndsWith(".targets", StringComparison.OrdinalIgnoreCase) || x.EndsWith(".sln", StringComparison.OrdinalIgnoreCase) || x.EndsWith(".slnx", StringComparison.OrdinalIgnoreCase) || Path.GetFileName(x) is "global.json" or "NuGet.Config" or "nuget.config" || x.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase));
         if (broad) return new(projects, "Shared build, solution or project metadata changed; conservative full graph.");
         var selected = new HashSet<string>(StringComparer.Ordinal); var references = new Dictionary<string, string[]>(StringComparer.Ordinal);
@@ -660,6 +664,12 @@ public record Affected(string[] Projects, string Reason);
 
 public static class SafeFiles
 {
+    public static bool IsDiscoveryExcluded(string path)
+    {
+        var normalized = path.Replace('\\', '/').TrimStart('/');
+        return normalized.Equals(".agent-results", StringComparison.Ordinal) || normalized.StartsWith(".agent-results/", StringComparison.Ordinal);
+    }
+
     public static IEnumerable<string> Enumerate(string root)
     {
         foreach (var file in Directory.EnumerateFiles(root)) if ((File.GetAttributes(file) & FileAttributes.ReparsePoint) == 0) yield return file;
@@ -737,6 +747,31 @@ public static class Secrets
         return Regex.Replace(value, Pattern, "[REDACTED]");
     }
     public static bool LooksSensitive(string value) => !string.Equals(value, Redact(value), StringComparison.Ordinal);
+    public static string RedactJson(string json)
+    {
+        var node = JsonNode.Parse(json) ?? throw new JsonException("Output JSON is empty.");
+        RedactNode(node);
+        return node.ToJsonString(AgentTool.Json);
+    }
+    static void RedactNode(JsonNode node)
+    {
+        if (node is JsonObject obj)
+        {
+            foreach (var entry in obj.ToArray())
+            {
+                var name = Redact(entry.Key);
+                if (name != entry.Key) { obj.Remove(entry.Key); obj[name] = entry.Value; }
+                if (entry.Value is not null) RedactNode(entry.Value);
+            }
+        }
+        else if (node is JsonArray array)
+        {
+            foreach (var item in array.ToArray())
+                if (item is not null) RedactNode(item);
+        }
+        else if (node is JsonValue value && value.TryGetValue<string>(out var text))
+            value.ReplaceWith(JsonValue.Create(Redact(text)));
+    }
 }
 
 public static class JevCredentials
@@ -918,13 +953,13 @@ public sealed class JevClient
         var confidence = Number("confidence"); var probabilities = a["probabilities"]?.AsObject() ?? throw new JsonException("Missing probability distribution.");
         var expected = kind == "choice" ? q["criteria"]!.AsObject().Select(x => x.Key).ToArray() : Enumerable.Range(0, q["criteria"]!.AsArray().Count).Select(x => x.ToString(CultureInfo.InvariantCulture)).ToArray();
         if (!expected.Order(StringComparer.Ordinal).SequenceEqual(probabilities.Select(x => x.Key).Order(StringComparer.Ordinal))) throw new JsonException("Wrong probability labels.");
-        var values = probabilities.Select(x => x.Value!.GetValue<double>()).ToArray();
+        var values = probabilities.Select(x => x.Value is JsonValue value && value.TryGetValue<double>(out var probability) ? probability : throw new JsonException("Invalid probability value.")).ToArray();
         if (values.Any(x => !double.IsFinite(x) || x is < 0 or > 1) || Math.Abs(values.Sum() - 1) > .01) throw new JsonException("Invalid probability distribution.");
         object value;
         if (kind == "choice")
         {
             var choice = a["choice"]?.GetValue<string>() ?? throw new JsonException("Missing choice.");
-            if (!expected.Contains(choice) || probabilities[choice]!.GetValue<double>() + .001 < values.Max()) throw new JsonException("Invalid choice.");
+            if (!expected.Contains(choice) || probabilities[choice] is not JsonValue choiceProbability || !choiceProbability.TryGetValue<double>(out var selected) || selected + .001 < values.Max()) throw new JsonException("Invalid choice.");
             value = choice;
         }
         else
@@ -932,7 +967,7 @@ public sealed class JevClient
             var score = Number("score", expected.Length - 1);
             var legend = a["legend"]?.AsObject() ?? throw new JsonException("Missing score legend.");
             if (!expected.Order(StringComparer.Ordinal).SequenceEqual(legend.Select(x => x.Key).Order(StringComparer.Ordinal)) || legend.Any(x => x.Value is not JsonValue value || !value.TryGetValue<string>(out _))) throw new JsonException("Invalid score legend.");
-            var weighted = probabilities.Sum(x => int.Parse(x.Key, CultureInfo.InvariantCulture) * x.Value!.GetValue<double>());
+            var weighted = probabilities.Sum(x => int.Parse(x.Key, CultureInfo.InvariantCulture) * (x.Value is JsonValue probability && probability.TryGetValue<double>(out var number) ? number : throw new JsonException("Invalid probability value.")));
             if (Math.Abs(score - weighted) > .02) throw new JsonException("Score and distribution disagree.");
             value = score;
         }
@@ -945,11 +980,27 @@ public record InstallManifest(string Toolkit, string Home, string CodexHome, Lis
 public static class Installer
 {
     static string ManifestPath(string codex) => Path.Combine(codex, "codex-toolkit-install.json");
-    static bool Exists(string path) => File.Exists(path) || Directory.Exists(path) || new FileInfo(path).LinkTarget is not null || new DirectoryInfo(path).LinkTarget is not null;
+    static string? LinkTarget(InstallEntry entry)
+    {
+        FileSystemInfo info = entry.Directory ? new DirectoryInfo(entry.Destination) : new FileInfo(entry.Destination);
+        try
+        {
+            if (info.ResolveLinkTarget(false) is { } resolved) return resolved.FullName;
+        }
+        catch (IOException) { }
+        var target = info.LinkTarget;
+        return target is null ? null : Path.GetFullPath(target, Path.GetDirectoryName(entry.Destination)!);
+    }
+    static bool Exists(InstallEntry entry) => File.Exists(entry.Destination) || Directory.Exists(entry.Destination) || LinkTarget(entry) is not null;
     static bool Matches(InstallEntry e)
     {
-        var target = e.Directory ? new DirectoryInfo(e.Destination).LinkTarget : new FileInfo(e.Destination).LinkTarget;
-        return target is not null && string.Equals(Path.GetFullPath(target, Path.GetDirectoryName(e.Destination)!), e.Source, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+        var target = LinkTarget(e);
+        return target is not null && string.Equals(Path.GetFullPath(target), Path.GetFullPath(e.Source), OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+    }
+    static void DeleteLink(InstallEntry entry)
+    {
+        if (entry.Directory && (OperatingSystem.IsWindows() || Directory.Exists(entry.Destination))) Directory.Delete(entry.Destination);
+        else File.Delete(entry.Destination);
     }
     static List<InstallEntry> Plan(string toolkit, string home, string codex, bool bin)
     {
@@ -988,12 +1039,14 @@ public static class Installer
         var manifest = Read(codex);
         if (manifest is not null && (manifest.Toolkit != toolkit || manifest.Home != home || manifest.CodexHome != codex)) throw new IOException("Installation belongs to a different checkout/home; use that checkout to uninstall first.");
         if (manifest is not null && manifest.Entries.Any(e => !IsOwnedShape(e, toolkit, home, codex))) throw new IOException("Ownership manifest contains unexpected paths; no changes made.");
-        var plan = command == "uninstall" ? manifest?.Entries.ToList() ?? [] : Plan(toolkit, home, codex, bin || manifest?.Entries.Any(x => x.Destination == Path.Combine(home, ".local/bin/codex-agent-tool")) == true);
-        var conflicts = plan.Where(e => Exists(e.Destination) && (manifest?.Entries.Contains(e) != true || !Matches(e))).Select(e => e.Destination).ToArray();
+        var plan = command == "uninstall" ? [] : Plan(toolkit, home, codex, bin || manifest?.Entries.Any(x => x.Destination == Path.Combine(home, ".local/bin/codex-agent-tool")) == true);
+        var removals = command == "uninstall" ? manifest?.Entries.ToList() ?? [] : command == "update" ? manifest?.Entries.Except(plan).ToList() ?? [] : [];
+        var conflicts = plan.Where(e => Exists(e) && (manifest?.Entries.Contains(e) != true || !Matches(e))).Select(e => e.Destination).ToArray();
         if (command != "uninstall" && conflicts.Length > 0) return new("conflict", new { conflicts, changed = false }, 1);
-        foreach (var entry in plan) SafeFiles.NoLinks(Path.GetDirectoryName(entry.Destination)!);
-        if (dryRun) return Result.Ok(new { dryRun, command, plan, preserved = conflicts });
-        if (plan.Count == 0) return Result.Ok(new { command, changed = 0 });
+        foreach (var entry in plan.Concat(removals)) SafeFiles.NoLinks(Path.GetDirectoryName(entry.Destination)!);
+        var preservedRemovals = removals.Where(e => Exists(e) && !Matches(e)).Select(e => e.Destination).ToArray();
+        if (dryRun) return Result.Ok(new { dryRun, command, plan, removals, preserved = conflicts.Concat(preservedRemovals) });
+        if (plan.Count == 0 && removals.Count == 0) return Result.Ok(new { command, changed = 0 });
         Directory.CreateDirectory(codex);
         var lockPath = Path.Combine(codex, "codex-toolkit-install.lock"); SafeFiles.NoLinks(lockPath);
         using var installLock = new FileStream(lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None, 1, FileOptions.DeleteOnClose);
@@ -1002,27 +1055,24 @@ public static class Installer
         if (JsonSerializer.Serialize(current, AgentTool.Json) != JsonSerializer.Serialize(manifest, AgentTool.Json)) throw new IOException("Installation changed concurrently; rerun command.");
         manifest ??= new(toolkit, home, codex, []);
         var changed = new List<string>(); var preserved = new List<string>();
+        foreach (var entry in removals)
+        {
+            if (Matches(entry)) { DeleteLink(entry); changed.Add(entry.Destination); }
+            else if (Exists(entry)) preserved.Add(entry.Destination);
+            manifest.Entries.Remove(entry);
+            SafeFiles.Atomic(ManifestPath(codex), JsonSerializer.Serialize(manifest, AgentTool.Json));
+        }
         foreach (var entry in plan)
         {
-            if (command == "uninstall")
-            {
-                if (Matches(entry)) { if (entry.Directory) Directory.Delete(entry.Destination); else File.Delete(entry.Destination); changed.Add(entry.Destination); }
-                else if (Exists(entry.Destination)) preserved.Add(entry.Destination);
-                manifest.Entries.Remove(entry);
-                SafeFiles.Atomic(ManifestPath(codex), JsonSerializer.Serialize(manifest, AgentTool.Json));
-            }
-            else
-            {
-                if (manifest.Entries.Contains(entry) && Matches(entry)) continue;
-                if (Exists(entry.Destination)) throw new IOException("Destination appeared during installation; rerun to inspect conflicts.");
-                Directory.CreateDirectory(Path.GetDirectoryName(entry.Destination)!);
-                if (entry.Directory) Directory.CreateSymbolicLink(entry.Destination, entry.Source); else File.CreateSymbolicLink(entry.Destination, entry.Source);
-                manifest.Entries.Remove(entry);
-                manifest.Entries.Add(entry);
-                try { SafeFiles.Atomic(ManifestPath(codex), JsonSerializer.Serialize(manifest, AgentTool.Json)); }
-                catch { if (Matches(entry)) { if (entry.Directory) Directory.Delete(entry.Destination); else File.Delete(entry.Destination); } throw; }
-                changed.Add(entry.Destination);
-            }
+            if (manifest.Entries.Contains(entry) && Matches(entry)) continue;
+            if (Exists(entry)) throw new IOException("Destination appeared during installation; rerun to inspect conflicts.");
+            Directory.CreateDirectory(Path.GetDirectoryName(entry.Destination)!);
+            if (entry.Directory) Directory.CreateSymbolicLink(entry.Destination, entry.Source); else File.CreateSymbolicLink(entry.Destination, entry.Source);
+            manifest.Entries.Remove(entry);
+            manifest.Entries.Add(entry);
+            try { SafeFiles.Atomic(ManifestPath(codex), JsonSerializer.Serialize(manifest, AgentTool.Json)); }
+            catch { if (Matches(entry)) DeleteLink(entry); throw; }
+            changed.Add(entry.Destination);
         }
         if (command == "uninstall") File.Delete(ManifestPath(codex));
         return Result.Ok(new { command, changed, preserved, note = "Only owned links changed; user replacements are preserved. Empty parent directories remain." });

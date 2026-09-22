@@ -26,6 +26,43 @@ public class CredentialBoundaryTests
         });
     }
 
+    [Fact]
+    public void StructuredAndOverflowOutputRedactEscapedCredentials()
+    {
+        var key = "phase2-\"synthetic\\boundary";
+        WithCredential(key, () =>
+        {
+            using var repo = new TemporaryGitRepository();
+            var output = AgentTool.Render(Result.Ok(new { id = key, values = new[] { "safe", key } }), repo.Root, new() { MaxOutputChars = 20 });
+            Assert.DoesNotContain(key, output, StringComparison.Ordinal);
+            Assert.True(JsonDocument.Parse(output).RootElement.GetProperty("truncated").GetBoolean());
+            var artifact = Directory.GetFiles(Path.Combine(repo.Root, ".agent-tool"), "*.json").Single();
+            using var parsed = JsonDocument.Parse(File.ReadAllText(artifact));
+            Assert.Equal("[REDACTED]", parsed.RootElement.GetProperty("data").GetProperty("id").GetString());
+            Assert.Equal("[REDACTED]", parsed.RootElement.GetProperty("data").GetProperty("values")[1].GetString());
+        });
+    }
+
+    [Theory]
+    [InlineData("auto", true)]
+    [InlineData("off", false)]
+    [InlineData("required", false)]
+    public async Task SensitiveScreenIdIsRefusedBeforeAnyCommandPath(string mode, bool dryRun)
+    {
+        var key = FakeKey();
+        await WithCredential(key, async () =>
+        {
+            using var repo = new TemporaryGitRepository(); var input = Path.Combine(repo.Root, "screen.json");
+            File.WriteAllText(input, $"{{\"query\":\"relevant?\",\"candidates\":[{{\"id\":\"{key}\",\"text\":\"safe\"}}]}}");
+            var args = new List<string> { "jev", "screen", "--input", input };
+            if (dryRun) args.Add("--dry-run"); else args.Add("--safe-input");
+            var result = await AgentTool.Execute(Cli.Parse([.. args]), AgentTool.FindToolkit(), repo.Root, new(new() { Mode = mode }, new(), new(), new()));
+            var output = AgentTool.Render(result, repo.Root, new());
+            Assert.Equal("REVIEW", result.Status); Assert.DoesNotContain(key, output, StringComparison.Ordinal);
+            Assert.False(Directory.Exists(Path.Combine(repo.Root, ".agent-tool", "jev-cache")));
+        });
+    }
+
     [Theory]
     [InlineData("dotnet")]
     [InlineData("git")]

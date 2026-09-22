@@ -29,7 +29,7 @@ asserts caller review of the payload, not a guarantee of automated secret detect
 Never send .env content, credentials, complete private repositories or oversized excerpts.
 Choice adds a criteria object mapping labels to descriptions. Score adds an ordered
 criteria array. Screen accepts query plus candidates with id and text and returns an
-individual judgment for every candidate. Query, ids and text must be non-empty strings,
+individual judgment for every candidate. Query, ids and text must be non-empty strings; ids containing a detected secret are refused before any request,
 and ids must be unique; malformed screen input keeps every candidate for review. Narrow
 candidates before screening.
 

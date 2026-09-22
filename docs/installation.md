@@ -23,7 +23,7 @@ Conflicts are reported before installation writes. Repeat installs and update ar
 idempotent. Ownership metadata is under the selected Codex directory. Uninstall removes
 only recorded links whose targets still match; replacements and parent directories remain.
 Do not move the checkout while installed: uninstall first, move, then reinstall. Update
-refreshes links after you update the checkout yourself; it never fetches, pulls or resets.
+refreshes links after you update the checkout yourself and removes recorded links for components no longer in that checkout; it never fetches, pulls or resets.
 
 Use --home /tmp/toolkit-profile for testing. No production home is changed by repository
 tests. Installation refuses symlinked state/destination parents to prevent redirected writes.

@@ -1,6 +1,6 @@
 # codex-toolkit
 
-A central Codex toolkit with 25 focused skills, three native agents and one .NET 10
+A central Codex toolkit with 24 focused skills, one native agent and one .NET 10
 file-based utility. Prefer **deterministic tools → bounded JEV judgment → Codex**:
 compute exact facts cheaply, preserve uncertainty, reserve reasoning for real problems.
 
