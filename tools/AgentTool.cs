@@ -1133,6 +1133,13 @@ public static class Validation
         if (string.IsNullOrWhiteSpace(version) || manifest["version"]?.GetValue<string>() != version || mirror["version"]?.GetValue<string>() != version) errors.Add("Toolkit and plugin manifest versions must match.");
         var marketplace = JsonNode.Parse(File.ReadAllText(Path.Combine(root, ".agents/plugins/marketplace.json")))!;
         if (marketplace["plugins"]?[0]?["source"]?["path"]?.GetValue<string>() != "./plugins/codex-toolkit") errors.Add("Marketplace source path mismatch.");
+        var ecosystem = JsonNode.Parse(File.ReadAllText(Path.Combine(root, "config/ecosystem.json")))!;
+        if (ecosystem["pluginPath"]?.GetValue<string>() != "plugins/codex-toolkit"
+            || ecosystem["templatePath"]?.GetValue<string>() != "templates/project"
+            || ecosystem["siblingRepositoriesAreRuntimeDependencies"]?.GetValue<bool>() != false
+            || Directory.GetDirectories(Path.Combine(root, "plugins")).Select(Path.GetFileName).Where(x => !string.IsNullOrEmpty(x)).Count() != 1
+            || Directory.GetDirectories(Path.Combine(root, "templates")).Select(Path.GetFileName).Where(x => !string.IsNullOrEmpty(x)).Count() != 1)
+            errors.Add("Ecosystem plugin/template topology mismatch.");
         try { Settings.Load(root, _ => null); } catch (ArgumentException e) { errors.Add(e.Message); }
         return new(errors.Count == 0 ? "ok" : "failed", new { jsonFiles = parsed, errors, note = "Structural validation includes configuration schemas and release identity." }, errors.Count == 0 ? 0 : 1);
     }

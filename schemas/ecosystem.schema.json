@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ecosystem-contract",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "productRepository",
+    "humanDocumentationRepository",
+    "metricsRepository",
+    "metricsPagesUrl",
+    "pluginPath",
+    "templatePath",
+    "siblingRepositoriesAreRuntimeDependencies",
+    "agentRuntimeReferencesOwner"
+  ],
+  "properties": {
+    "$schema": { "type": "string" },
+    "productRepository": { "const": "simplexidev/codex-toolkit" },
+    "humanDocumentationRepository": { "const": "simplexidev/codex-toolkit-docs" },
+    "metricsRepository": { "const": "simplexidev/codex-toolkit-metrics" },
+    "metricsPagesUrl": { "const": "https://simplexidev.github.io/codex-toolkit-metrics/" },
+    "pluginPath": { "const": "plugins/codex-toolkit" },
+    "templatePath": { "const": "templates/project" },
+    "siblingRepositoriesAreRuntimeDependencies": { "const": false },
+    "agentRuntimeReferencesOwner": { "const": "product" }
+  }
+}
