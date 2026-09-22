@@ -40,6 +40,20 @@ public class MetadataTests
         Assert.Equal(0, Validation.Run(Root).ExitCode);
     }
     [Fact]
+    public void V2EcosystemContractHasOnePluginOneTemplateAndNoSiblingRuntimeDependencies()
+    {
+        var contract = JsonNode.Parse(File.ReadAllText(Path.Combine(Root, "config/ecosystem.json")))!;
+        Assert.Equal("simplexidev/codex-toolkit", contract["productRepository"]!.GetValue<string>());
+        Assert.Equal("simplexidev/codex-toolkit-docs", contract["humanDocumentationRepository"]!.GetValue<string>());
+        Assert.Equal("simplexidev/codex-toolkit-metrics", contract["metricsRepository"]!.GetValue<string>());
+        Assert.Equal("https://simplexidev.github.io/codex-toolkit-metrics/", contract["metricsPagesUrl"]!.GetValue<string>());
+        Assert.False(contract["siblingRepositoriesAreRuntimeDependencies"]!.GetValue<bool>());
+        Assert.Equal("product", contract["agentRuntimeReferencesOwner"]!.GetValue<string>());
+        Assert.Equal(new[] { "codex-toolkit" }, Directory.GetDirectories(Path.Combine(Root, "plugins")).Select(Path.GetFileName).Order());
+        Assert.Equal(new[] { "project" }, Directory.GetDirectories(Path.Combine(Root, "templates")).Select(Path.GetFileName).Order());
+        Assert.True(File.Exists(Path.Combine(Root, "plugins/codex-toolkit/references/v2-baseline.md")));
+    }
+    [Fact]
     public async Task ReleaseArchiveContainsUserFacingMetadataAndExcludesDevelopmentState()
     {
         using var repo = new TemporaryGitRepository(); var archive = Path.Combine(repo.Root, "codex-toolkit.zip");

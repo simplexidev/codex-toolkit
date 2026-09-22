@@ -1,0 +1,11 @@
+{
+  "$schema": "../schemas/ecosystem.schema.json",
+  "productRepository": "simplexidev/codex-toolkit",
+  "humanDocumentationRepository": "simplexidev/codex-toolkit-docs",
+  "metricsRepository": "simplexidev/codex-toolkit-metrics",
+  "metricsPagesUrl": "https://simplexidev.github.io/codex-toolkit-metrics/",
+  "pluginPath": "plugins/codex-toolkit",
+  "templatePath": "templates/project",
+  "siblingRepositoriesAreRuntimeDependencies": false,
+  "agentRuntimeReferencesOwner": "product"
+}
