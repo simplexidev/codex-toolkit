@@ -23,7 +23,7 @@ jobs:
         run: test "$RELEASE_TAG" = "v$(jq -r .version config/toolkit.json)"
       - run: dotnet tools/AgentTool.cs eval
       - run: dotnet tools/AgentTool.cs release --output artifacts/codex-toolkit.zip
-      - run: sha256sum artifacts/codex-toolkit.zip > artifacts/SHA256SUMS
+      - run: (cd artifacts && sha256sum codex-toolkit.zip > SHA256SUMS)
       - name: Create draft for human review
         env:
           GH_TOKEN: ${{ github.token }}

@@ -107,6 +107,14 @@ public class MetadataTests
         Assert.DoesNotContain("echo $TYPESAFE_API_KEY", workflow);
         Assert.DoesNotContain("printf '%s\\n' \"$TYPESAFE_API_KEY\"", workflow);
     }
+
+    [Fact]
+    public void ReleaseChecksumsUseDownloadableAssetNames()
+    {
+        var workflow = File.ReadAllText(Path.Combine(Root, ".github/workflows/release.yml"));
+        Assert.Contains("(cd artifacts && sha256sum codex-toolkit.zip > SHA256SUMS)", workflow);
+        Assert.DoesNotContain("sha256sum artifacts/codex-toolkit.zip > artifacts/SHA256SUMS", workflow);
+    }
 }
 
 public class RepositoryIntegrityTests
