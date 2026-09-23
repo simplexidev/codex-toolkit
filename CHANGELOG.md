@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Adds a schema-validated agent audit and metrics handoff covering current, retired,
+  native-comparator, and proposed roles without installing new production agents.
 - Adds bounded GitHub Actions run/job/failed-log inspection with one compact CI
   triage skill, while keeping reruns and workflow mutations caller-controlled.
 - Adds non-merging conflict forecasts, SARIF baseline diffs, ZIP safety/content
