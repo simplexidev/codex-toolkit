@@ -55,6 +55,8 @@ public class DeterministicPrimitivesTests
         var build = JsonSerializer.SerializeToNode(await DotnetFacts.BuildPlan(repo.Root, "src/A.csproj", null, "Release", true), AgentTool.Json)!;
         Assert.Equal("restore", build["commands"]![0]!["arguments"]![0]!.GetValue<string>());
         Assert.Contains("-bl:.agent-tool/binlogs/", build["commands"]![1]!["arguments"]!.AsArray().Last()!.GetValue<string>(), StringComparison.Ordinal);
+        Assert.Equal("structured-binlog-query", build["artifacts"]!["analysisOrder"]![0]!.GetValue<string>());
+        Assert.Equal("bounded-text-log-fallback", build["artifacts"]!["analysisOrder"]![1]!.GetValue<string>());
         var test = JsonSerializer.SerializeToNode(await DotnetFacts.TestPlan(repo.Root, "src/A.csproj", null, "Release", new(null, null, null, "Category=Fast")), AgentTool.Json)!;
         Assert.Equal("vstest", test["tests"]![0]!["platform"]!.GetValue<string>());
         Assert.Contains("Category=Fast", test["tests"]![0]!["command"]!["arguments"]!.AsArray().Select(value => value!.GetValue<string>()));
@@ -118,13 +120,19 @@ public class DeterministicPrimitivesTests
     }
 
     [Fact]
-    public void DiagnosticsPlanRejectsInvalidPidAndReportsTools()
+    public async Task DiagnosticsPlanSelectsOneBoundedSignalAndReportsEnvironment()
     {
-        Assert.Throws<ArgumentException>(() => DotnetFacts.DiagnosticsPlan("0"));
-        var node = JsonSerializer.SerializeToNode(DotnetFacts.DiagnosticsPlan("42"), AgentTool.Json)!;
-        Assert.Equal(5, node["tools"]!.AsArray().Count); Assert.Equal(4, node["plans"]!.AsArray().Count);
-        Assert.Equal("dotnet-counters", node["plans"]![0]!["executable"]!.GetValue<string>());
-        Assert.Equal("monitor", node["plans"]![0]!["arguments"]![0]!.GetValue<string>());
+        await Assert.ThrowsAsync<ArgumentException>(() => DotnetFacts.DiagnosticsPlan("0"));
+        await Assert.ThrowsAsync<ArgumentException>(() => DotnetFacts.DiagnosticsPlan("42", "unknown"));
+        await Assert.ThrowsAsync<ArgumentException>(() => DotnetFacts.DiagnosticsPlan("42", "cpu", "301"));
+        var node = JsonSerializer.SerializeToNode(await DotnetFacts.DiagnosticsPlan("42", "contention", "20"), AgentTool.Json)!;
+        Assert.Equal(5, node["tools"]!.AsArray().Count);
+        Assert.Equal("contention", node["signal"]!.GetValue<string>());
+        Assert.Equal(20, node["durationSeconds"]!.GetValue<int>());
+        Assert.NotNull(node["environment"]!["os"]);
+        var plans = node["collection"]!["plans"]!.AsArray(); Assert.Single(plans);
+        Assert.Equal("dotnet-trace", plans[0]!["executable"]!.GetValue<string>());
+        Assert.Contains("00:00:20", plans[0]!["arguments"]!.AsArray().Select(value => value!.GetValue<string>()));
     }
 
     [Fact]

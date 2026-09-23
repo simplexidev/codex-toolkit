@@ -10,6 +10,10 @@
   writing, quality review, and coverage; platform/framework edge cases load lazily.
 - Makes test plans detect VSTest/MTP command mode and framework, translate method,
   class, or category scopes, and fail closed for ambiguous platform filters.
+- Adds compact build-diagnosis, build-optimization, runtime-diagnosis, and .NET
+  performance skills with lazy MSBuild and advanced-.NET routing references.
+- Makes diagnostics plans select one bounded signal and report OS, architecture,
+  runtime, SDK, tool availability, artifact location, and collection safety.
 
 ## 1.0.0
 

@@ -205,6 +205,33 @@ public class MetadataTests
     }
 
     [Fact]
+    public void BuildDiagnosticsPerformanceAndAdvancedDotnetStayCompactAndLazy()
+    {
+        var files = new[]
+        {
+            "plugins/codex-toolkit/skills/diagnose-build/SKILL.md",
+            "plugins/codex-toolkit/skills/optimize-build/SKILL.md",
+            "plugins/codex-toolkit/skills/diagnose-dotnet/SKILL.md",
+            "plugins/codex-toolkit/skills/investigate-dotnet-performance/SKILL.md",
+            "plugins/codex-toolkit/references/msbuild-diagnostics.md",
+            "plugins/codex-toolkit/references/msbuild-performance.md",
+            "plugins/codex-toolkit/references/advanced-dotnet-routing.md"
+        };
+        Assert.All(files.Take(4), file => Assert.InRange(new FileInfo(Path.Combine(Root, file)).Length, 1, 2_500));
+        Assert.InRange(files.Sum(file => new FileInfo(Path.Combine(Root, file)).Length), 1, 12_000);
+        foreach (var file in files.Skip(4))
+        {
+            var text = File.ReadAllText(Path.Combine(Root, file));
+            Assert.Contains("4ed5f7c121da8dd31af31a35cef05070948c6556", text, StringComparison.Ordinal);
+            Assert.Contains("plugins/dotnet-", text, StringComparison.Ordinal);
+        }
+        var build = File.ReadAllText(Path.Combine(Root, files[0]));
+        Assert.True(build.IndexOf("structurally", StringComparison.Ordinal) < build.IndexOf("raw-log", StringComparison.Ordinal));
+        Assert.DoesNotContain("diagnostics", Directory.GetDirectories(Path.Combine(Root, "plugins/codex-toolkit/skills")).Select(Path.GetFileName));
+        Assert.DoesNotContain("performance-investigation", Directory.GetDirectories(Path.Combine(Root, "plugins/codex-toolkit/skills")).Select(Path.GetFileName));
+    }
+
+    [Fact]
     public void LiveJevWorkflowIsManuallyOrLowFrequencyTriggeredAndSecretIsStepScoped()
     {
         var workflow = File.ReadAllText(Path.Combine(Root, ".github/workflows/jev-integration.yml"));

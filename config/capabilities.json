@@ -228,14 +228,16 @@
       "existingSupport": [
         { "kind": "agent-tool", "id": "repo health", "scope": "Evaluates selected MSBuild properties against policy." },
         { "kind": "agent-tool", "id": "dotnet build-plan", "scope": "Emits explicit restore/build steps and optional bounded binlog artifact paths." },
+        { "kind": "skill", "id": "diagnose-build", "scope": "Routes build failures from exact evaluation/compiler/binlog evidence." },
+        { "kind": "skill", "id": "optimize-build", "scope": "Routes measured build regressions to one lazy performance branch." },
         { "kind": "agent-tool", "id": "logs summarize", "scope": "Compacts text build output." },
         { "kind": "upstream", "id": "dotnet-msbuild", "scope": "Recommended upstream build-analysis skills." },
         { "kind": "upstream", "id": "Microsoft.AITools.BinlogMcp", "scope": "On-demand structured binlog inspection reference." }
       ],
       "opportunities": { "deterministic": "Use evaluated properties and a reviewed binlog parser.", "jev": "No fit for exact build graph facts.", "agent": "Connect the first causal diagnostic to source or configuration." },
       "routing": { "primary": "deterministic", "fallback": ["agent", "stronger-agent"], "reason": "MSBuild evaluation executes exact project logic but causal diagnosis may be complex." },
-      "staticCost": { "level": "none", "activation": "none", "loads": [], "concern": "Keep optional binlog tooling out of the default plugin context." },
-      "gaps": ["No built-in binlog query surface.", "Text summaries are not MSBuild-structure aware."],
+      "staticCost": { "level": "low", "activation": "implicit", "loads": ["diagnose-build", "optimize-build"], "concern": "Choose failure or performance intent, then load one evidence-selected reference branch." },
+      "gaps": ["Structured binlog queries remain in the optional upstream BinlogMcp until its API is stable."],
       "duplication": ["repo-health covers policy properties, not general binlog diagnostics."],
       "recommendedAction": "Use the upstream integration first; add a narrow AgentTool adapter only with a stable API and fixtures."
     },
@@ -245,17 +247,17 @@
       "tasks": ["collect counters or traces", "inspect dumps", "diagnose CPU, GC or memory regressions"],
       "coverage": "partial",
       "existingSupport": [
-        { "kind": "skill", "id": "diagnostics", "scope": "Selects bounded .NET diagnostics and protects dump sensitivity." },
-        { "kind": "skill", "id": "performance-investigation", "scope": "Evidence-led regression diagnosis." },
+        { "kind": "skill", "id": "diagnose-dotnet", "scope": "Selects bounded .NET diagnostics and protects artifact sensitivity." },
+        { "kind": "skill", "id": "investigate-dotnet-performance", "scope": "Evidence-led regression diagnosis." },
         { "kind": "upstream", "id": "dotnet-diag", "scope": "Optional diagnostic collection workflows." },
         { "kind": "agent-tool", "id": "results context", "scope": "Selects a caller-designated durable artifact without history scans." },
-        { "kind": "agent-tool", "id": "dotnet diagnostics-plan", "scope": "Detects installed diagnostics tools and emits PID-scoped collection command arguments." }
+        { "kind": "agent-tool", "id": "dotnet diagnostics-plan", "scope": "Detects OS/runtime/SDK/tools and emits one signal-specific, PID-scoped collection plan." }
       ],
       "opportunities": { "deterministic": "Parse counters and trace summaries when stable local formats are available.", "jev": "No fit for sensitive raw artifacts or exact measurements.", "agent": "Form and test causal hypotheses from bounded evidence." },
       "routing": { "primary": "deterministic", "fallback": ["agent", "stronger-agent"], "reason": "Measurements lead; difficult causal diagnosis may justify stronger reasoning." },
-      "staticCost": { "level": "medium", "activation": "implicit", "loads": ["diagnostics", "performance-investigation"], "concern": "Choose collection or investigation, not both by default." },
+      "staticCost": { "level": "low", "activation": "implicit", "loads": ["diagnose-dotnet", "investigate-dotnet-performance"], "concern": "Choose incident diagnosis or measured performance investigation, not both by default." },
       "gaps": ["AgentTool plans but intentionally does not initiate sensitive diagnostics collection or parse binary traces and dumps."],
-      "duplication": ["Diagnostics chooses evidence; performance-investigation follows evidence to cause."],
+      "duplication": ["diagnose-dotnet handles incidents; investigate-dotnet-performance handles measured regressions."],
       "recommendedAction": "Keep collection on demand and add parsers only for safe, bounded summaries."
     },
     {

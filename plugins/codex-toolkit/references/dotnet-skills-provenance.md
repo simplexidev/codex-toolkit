@@ -21,9 +21,9 @@ entry files and separately report supporting files.
 | Coverage, CRAP and untested-source facts | `REPLACE_WITH_AGENTTOOL` | Parse formats and calculate metrics in AgentTool; GPT judges behavioral significance. |
 | Test quality taxonomies | `CONVERT_TO_REFERENCE` | Load the compact quality checks only for an explicit audit or unclear candidate; do not load six overlapping skills. |
 | Test authoring, testability and migrations | `KEEP_UPSTREAM` | Use the compact local workflow first; select exact upstream framework or migration guidance only when repository patterns are insufficient. |
-| MSBuild binlogs and performance | `KEEP_UPSTREAM` | Prefer the upstream binlog workflow and prerelease BinlogMcp on demand; measurements remain deterministic. |
-| MSBuild authoring patterns | `CONVERT_TO_REFERENCE` | Later index compact pitfalls after evaluated project facts are known. |
-| Runtime diagnostics and performance | `KEEP_UPSTREAM` | Choose one collector or analysis branch; never send raw sensitive dumps/traces to JEV. |
+| MSBuild binlogs and performance | `KEEP_UPSTREAM` | Enter through compact local diagnose/optimize skills; prefer prerelease BinlogMcp structured queries on demand. |
+| MSBuild authoring patterns | `CONVERT_TO_REFERENCE` | Load the compact diagnostic or performance branch only after evaluated facts select it. |
+| Runtime diagnostics and performance | `KEEP_UPSTREAM` | AgentTool chooses collection mechanics; load one upstream analysis branch and never send raw dumps/traces to JEV. |
 | File-based C#, P/Invoke, SIMD and trusted publishing | `KEEP_UPSTREAM` | Use only for their narrow triggers and pair with compiler, ABI, benchmark or authorization evidence. |
 | SDK setup | `REPLACE_WITH_AGENTTOOL` | Detect SDK/architecture exactly and preserve an explicit boundary before downloads or environment mutation. |
 | AOT/API and framework upgrades | `KEEP_UPSTREAM` | Use analyzer/build evidence first; select the exact source/target version guidance. |

@@ -1,0 +1,6 @@
+interface:
+  display_name: "Diagnose Build"
+  short_description: Diagnose a concrete .NET restore, compiler, evaluation, target, or project-reference failure.
+  default_prompt: "Use $diagnose-build."
+policy:
+  allow_implicit_invocation: true

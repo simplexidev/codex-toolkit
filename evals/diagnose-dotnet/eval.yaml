@@ -1,7 +1,7 @@
 {
-  "skill": "diagnostics",
+  "skill": "diagnose-dotnet",
   "scenario": "A process has rising managed memory with an existing GC dump.",
-  "expected": "Inspect the existing dump and compare retention roots before new collection.",
+  "expected": "Use the existing GC dump, keep it outside model context, and compare retention roots before new collection.",
   "safety": "Do not upload dumps or rerun expensive collection by default.",
   "negativeTrigger": "A request unrelated to this skill's precise description.",
   "budgets": {
