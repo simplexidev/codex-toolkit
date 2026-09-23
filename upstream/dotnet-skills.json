@@ -160,7 +160,7 @@
       "upstreamPaths": ["plugins/dotnet-msbuild/skills/binlog-generation/SKILL.md", "plugins/dotnet-msbuild/skills/binlog-failure-analysis/SKILL.md"],
       "classification": "KEEP_UPSTREAM", "trigger": "Console output is insufficient and a bounded binlog exists or is authorized.",
       "referenceLoading": "Load generation only to capture; analysis only when a binlog exists.", "staticCost": { "level": "low", "scope": "Two focused skills total about 7 KB." },
-      "toolsAndMcps": ["MSBuild binary logger", "Microsoft.AITools.BinlogMcp via dotnet dnx --prerelease"], "currentToolkitUse": ["AgentTool logs summarize", "AgentTool repo health", "upstream/tools.json"],
+      "toolsAndMcps": ["MSBuild binary logger", "Microsoft.AITools.BinlogMcp via dotnet dnx --prerelease"], "currentToolkitUse": ["diagnose-build skill", "AgentTool dotnet build-plan", "upstream/tools.json"],
       "deterministicParts": "Capture/query binlogs and extract target/task timings and first errors.", "jevSuitableParts": "None for build graph facts.",
       "gptExpertValue": "Connect structured evidence to repository configuration.", "rationale": "Keep the focused integration upstream until the prerelease MCP API is stable."
     },
@@ -169,7 +169,7 @@
       "upstreamPaths": ["plugins/dotnet-msbuild/skills/build-perf-baseline/SKILL.md", "plugins/dotnet-msbuild/skills/build-perf-diagnostics/SKILL.md", "plugins/dotnet-msbuild/skills/build-parallelism/SKILL.md", "plugins/dotnet-msbuild/skills/eval-performance/SKILL.md", "plugins/dotnet-msbuild/skills/incremental-build/SKILL.md", "plugins/dotnet-msbuild/skills/resolve-project-references/SKILL.md"],
       "classification": "KEEP_UPSTREAM", "trigger": "A measured slow build needs baseline, evaluation, parallelism, incremental, or binlog diagnosis.",
       "referenceLoading": "Start with baseline and choose one branch from measured evidence.", "staticCost": { "level": "very-high", "scope": "Six skills total roughly 58 KB." },
-      "toolsAndMcps": ["MSBuild binary logger", "Microsoft.AITools.BinlogMcp", "dotnet build", "MSBuild /graph", "MSBuild /pp"], "currentToolkitUse": ["performance-investigation skill", "benchmark skill", "AgentTool logs summarize"],
+      "toolsAndMcps": ["MSBuild binary logger", "Microsoft.AITools.BinlogMcp", "dotnet build", "MSBuild /graph", "MSBuild /pp"], "currentToolkitUse": ["optimize-build skill", "benchmark skill", "AgentTool dotnet build-plan"],
       "deterministicParts": "Collect comparable timings and query tasks, targets, evaluation and critical paths.", "jevSuitableParts": "None for timings or thresholds.",
       "gptExpertValue": "Interpret confounders and preserve build correctness.", "rationale": "This strong upstream area should remain an on-demand expert integration."
     },
@@ -177,7 +177,7 @@
       "id": "msbuild-authoring", "capabilities": ["msbuild", "scoped-edits-refactors"], "plugin": "dotnet-msbuild",
       "upstreamPaths": ["plugins/dotnet-msbuild/skills/check-bin-obj-clash/SKILL.md", "plugins/dotnet-msbuild/skills/copy-to-output-directory/SKILL.md", "plugins/dotnet-msbuild/skills/directory-build-organization/SKILL.md", "plugins/dotnet-msbuild/skills/extension-points/SKILL.md", "plugins/dotnet-msbuild/skills/including-generated-files/SKILL.md", "plugins/dotnet-msbuild/skills/item-management/SKILL.md", "plugins/dotnet-msbuild/skills/msbuild-antipatterns/SKILL.md", "plugins/dotnet-msbuild/skills/msbuild-modernization/SKILL.md", "plugins/dotnet-msbuild/skills/property-patterns/SKILL.md", "plugins/dotnet-msbuild/skills/target-authoring/SKILL.md"],
       "classification": "CONVERT_TO_REFERENCE", "trigger": "A concrete MSBuild edit matches a pitfall after properties/imports are evaluated.",
-      "referenceLoading": "Later extract an indexed pitfall catalog and load one section.", "staticCost": { "level": "very-high", "scope": "Ten overlapping skills exceed 120 KB plus references." },
+      "referenceLoading": "Use the compact local diagnostic or performance index, then load one upstream section only if needed.", "staticCost": { "level": "very-high", "scope": "Ten overlapping skills exceed 120 KB plus references." },
       "toolsAndMcps": ["dotnet msbuild", "MSBuild /pp", "Microsoft.AITools.BinlogMcp", "XML inspection"], "currentToolkitUse": ["AgentTool repo health", "AgentTool dotnet verify", "architecture-change skill"],
       "deterministicParts": "Evaluate imports, properties, items, targets, paths and build results.", "jevSuitableParts": "No fit for evaluated facts; limited lint-candidate ranking.",
       "gptExpertValue": "Apply MSBuild semantics and explain evaluation/execution interactions.", "rationale": "Valuable but overlapping knowledge is better as a future compact lazy reference."
@@ -187,7 +187,7 @@
       "upstreamPaths": ["plugins/dotnet-diag/skills/dotnet-trace-collect/SKILL.md", "plugins/dotnet-diag/skills/dump-collect/SKILL.md"],
       "classification": "KEEP_UPSTREAM", "trigger": "A runtime issue requires a bounded trace or dump with understood sensitivity.",
       "referenceLoading": "Choose trace or dump, then one environment reference.", "staticCost": { "level": "high", "scope": "Two skills plus eight environment references exceed 100 KB." },
-      "toolsAndMcps": ["dotnet-trace", "dotnet-dump", "dotnet-monitor", "PerfView", "perfcollect", "createdump"], "currentToolkitUse": ["diagnostics skill", "performance-investigation skill", "config/toolkit.json optionalTools"],
+      "toolsAndMcps": ["dotnet-trace", "dotnet-dump", "dotnet-monitor", "PerfView", "perfcollect", "createdump"], "currentToolkitUse": ["diagnose-dotnet skill", "investigate-dotnet-performance skill", "AgentTool dotnet diagnostics-plan"],
       "deterministicParts": "Select process/duration, invoke tools and preserve artifact metadata.", "jevSuitableParts": "None for sensitive raw traces or dumps.",
       "gptExpertValue": "Choose least-invasive evidence and interpret bounded summaries.", "rationale": "Platform detail is valuable upstream; compact toolkit routing remains the entry point."
     },
@@ -196,7 +196,7 @@
       "upstreamPaths": ["plugins/dotnet-diag/skills/analyzing-dotnet-performance/SKILL.md", "plugins/dotnet-diag/skills/microbenchmarking/SKILL.md"],
       "classification": "KEEP_UPSTREAM", "trigger": "Measured evidence or an explicit benchmark question needs .NET expertise.",
       "referenceLoading": "Load one static-pattern or BenchmarkDotNet topic after evidence narrows scope.", "staticCost": { "level": "very-high", "scope": "Two skills plus twelve references exceed 100 KB." },
-      "toolsAndMcps": ["BenchmarkDotNet", "dotnet-counters", "dotnet-trace", "profilers"], "currentToolkitUse": ["performance-investigation skill", "benchmark skill", "upstream/tools.json"],
+      "toolsAndMcps": ["BenchmarkDotNet", "dotnet-counters", "dotnet-trace", "profilers"], "currentToolkitUse": ["investigate-dotnet-performance skill", "benchmark skill", "upstream/tools.json"],
       "deterministicParts": "Derive measurements, statistics, allocations and trace summaries from tools.", "jevSuitableParts": "None for numerical significance.",
       "gptExpertValue": "Design experiments and connect patterns to causal code paths.", "rationale": "High expert value and progressive disclosure justify on-demand upstream use."
     },
@@ -205,7 +205,7 @@
       "upstreamPaths": ["plugins/dotnet-diag/skills/clr-activation-debugging/SKILL.md"],
       "classification": "KEEP_UPSTREAM", "trigger": "CLR hosting, COM activation, runtime selection, or host startup fails.",
       "referenceLoading": "Load only activation-flow, COM, or log-format detail matching the symptom.", "staticCost": { "level": "high", "scope": "One 20.9 KB skill plus three references." },
-      "toolsAndMcps": ["COREHOST_TRACE", "hostfxr/corehost logs", "Windows COM diagnostics"], "currentToolkitUse": ["diagnostics skill"],
+      "toolsAndMcps": ["COREHOST_TRACE", "hostfxr/corehost logs", "Windows COM diagnostics"], "currentToolkitUse": ["diagnose-dotnet skill"],
       "deterministicParts": "Collect environment and host traces; parse selected runtime and status.", "jevSuitableParts": "None for host facts.",
       "gptExpertValue": "Interpret hosting transitions and platform failures.", "rationale": "Niche, genuine expertise with little duplication."
     },
@@ -214,7 +214,7 @@
       "upstreamPaths": ["plugins/dotnet-diag/skills/android-tombstone-symbolication/SKILL.md", "plugins/dotnet-diag/skills/apple-crash-symbolication/SKILL.md"],
       "classification": "KEEP_UPSTREAM", "trigger": "A .NET Android tombstone or Apple .ips log needs runtime symbolication.",
       "referenceLoading": "Load one platform skill; review upstream network-fetching scripts before execution.", "staticCost": { "level": "high", "scope": "Two skills, two scripts and format guidance." },
-      "toolsAndMcps": ["llvm-symbolizer", "atos", "dwarfdump", "idevicecrashreport", "Microsoft symbol server"], "currentToolkitUse": ["diagnostics skill"],
+      "toolsAndMcps": ["llvm-symbolizer", "atos", "dwarfdump", "idevicecrashreport", "Microsoft symbol server"], "currentToolkitUse": ["diagnose-dotnet skill"],
       "deterministicParts": "Extract IDs/addresses, resolve symbols and record provenance.", "jevSuitableParts": "None; artifacts can be sensitive and matches are exact.",
       "gptExpertValue": "Interpret frames and distinguish managed/runtime/platform causes.", "rationale": "Keep explicit upstream capability; do not copy network scripts into AgentTool."
     },
@@ -241,7 +241,7 @@
       "upstreamPaths": ["plugins/dotnet-advanced/skills/vectorization/SKILL.md"],
       "classification": "KEEP_UPSTREAM", "trigger": "Profiling identifies a hot numeric loop and SIMD is requested.",
       "referenceLoading": "Require a measured hotspot and pair with benchmark guidance.", "staticCost": { "level": "medium", "scope": "One 11.9 KB skill." },
-      "toolsAndMcps": ["BenchmarkDotNet", "System.Numerics.Vector", "System.Runtime.Intrinsics", "disassembly diagnoser"], "currentToolkitUse": ["benchmark skill", "performance-investigation skill"],
+      "toolsAndMcps": ["BenchmarkDotNet", "System.Numerics.Vector", "System.Runtime.Intrinsics", "disassembly diagnoser"], "currentToolkitUse": ["benchmark skill", "investigate-dotnet-performance skill"],
       "deterministicParts": "Measure throughput, allocation, ISA and generated code.", "jevSuitableParts": "None for performance results.",
       "gptExpertValue": "Choose safe algorithms, tails and portability.", "rationale": "Genuine expert value only after profiling."
     },
@@ -322,7 +322,7 @@
       "upstreamPaths": ["plugins/dotnet-aspnetcore/skills/configuring-opentelemetry-dotnet/SKILL.md", "plugins/dotnet-aspnetcore/skills/convert-blazor-server-to-webapp/SKILL.md", "plugins/dotnet-aspnetcore/skills/dotnet-webapi/SKILL.md", "plugins/dotnet-aspnetcore/skills/minimal-api-file-upload/SKILL.md", "plugins/dotnet-data/skills/create-datadriven-aspnetcore/SKILL.md", "plugins/dotnet-data/skills/optimizing-ef-core-queries/SKILL.md"],
       "classification": "KEEP_UPSTREAM", "trigger": "Concrete ASP.NET Core, OTel, upload, scaffolding, or EF query task.",
       "referenceLoading": "Select the exact web/data skill only.", "staticCost": { "level": "very-high", "scope": "Six skills across two plugins total about 83 KB." },
-      "toolsAndMcps": ["ASP.NET Core", "OpenTelemetry SDK", "EF Core", "database query logging"], "currentToolkitUse": ["AgentTool dotnet verify", "diagnostics skill", "performance-investigation skill"],
+      "toolsAndMcps": ["ASP.NET Core", "OpenTelemetry SDK", "EF Core", "database query logging"], "currentToolkitUse": ["AgentTool dotnet verify", "diagnose-dotnet skill", "investigate-dotnet-performance skill"],
       "deterministicParts": "Build/test, route/model discovery, generated SQL and telemetry evidence.", "jevSuitableParts": "No fit for SQL, routes or traces.",
       "gptExpertValue": "Implement framework-correct security, lifetime and query patterns.", "rationale": "Domain guidance remains separately selected upstream."
     },

@@ -1,7 +1,7 @@
 {
-  "skill": "performance-investigation",
+  "skill": "investigate-dotnet-performance",
   "scenario": "Latency doubled after deployment but CPU is low and contention counters rose.",
-  "expected": "Investigate waits and lock contention using traces.",
+  "expected": "Use a bounded contention trace plan and investigate waits and locks under a comparable workload.",
   "safety": "Do not start broad microbenchmarks without a causal question.",
   "negativeTrigger": "A request unrelated to this skill's precise description.",
   "budgets": {

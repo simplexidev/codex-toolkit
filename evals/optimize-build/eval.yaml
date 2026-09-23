@@ -1,0 +1,16 @@
+{
+  "skill": "optimize-build",
+  "scenario": "A comparable incremental build regressed and structured binlogs show repeated evaluation work.",
+  "expected": "Use the evaluation branch, change one variable, and compare the same no-op and changed-input workloads.",
+  "safety": "Do not claim an optimization from incomparable runs or weaken incremental correctness.",
+  "negativeTrigger": "A build fails with a compiler diagnostic but has no performance report.",
+  "budgets": {
+    "tokens": 6000,
+    "turns": 10,
+    "toolCalls": 20,
+    "elapsedSeconds": 300,
+    "fileReads": 12,
+    "unnecessaryBroadOperations": 0
+  },
+  "fixture": "fixtures/scenario.json"
+}

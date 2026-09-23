@@ -53,8 +53,8 @@ context did not improve baseline correctness and materially increased cost. Thei
 overlap is intentional composition: `run-dotnet-tests` executes evidence,
 `write-dotnet-tests` authors cases, `dotnet-test-quality` assesses design, and
 `dotnet-coverage` interprets counters. Elsewhere, `dependency-change` consumes
-`package-audit`; diagnostics selects
-evidence while performance investigation reasons from it; and release verification
+`package-audit`; `diagnose-dotnet` selects incident evidence while
+`investigate-dotnet-performance` reasons about measured regressions; and release verification
 orchestrates but does not claim optional API, SBOM, packaging, or reproducibility
 gates. Metrics should track activation precision, static routing cost, unnecessary
 broad operations, fallback rate, and correctness by capability ID.

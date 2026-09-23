@@ -35,7 +35,8 @@ public static class AgentTool
         dotnet inspect [--project PATH] | build-plan [--base REF] [--project PATH] [--configuration NAME] [--binlog]
         dotnet test-plan [--base REF] [--project PATH] [--configuration NAME]
             [--test NAME | --class NAME | --category NAME | --filter EXPR]
-        dotnet diagnostics-plan [--process-id NUMBER]
+        dotnet diagnostics-plan [--process-id NUMBER] [--signal counters|cpu|contention|allocations|managed-memory|crash|hang]
+            [--duration-seconds NUMBER]
         dotnet verify [--base REF] [--project PATH] | format --project PATH [--apply]
         dotnet dependencies --project PATH | package-audit --project PATH | api-check --project PATH | release-verify --project PATH
         logs summarize --file PATH | sarif summarize --file PATH
@@ -154,7 +155,7 @@ public static class AgentTool
             case "dotnet inspect": return Result.Ok(await DotnetFacts.Inspect(root, c.Get("project")));
             case "dotnet build-plan": return Result.Ok(await DotnetFacts.BuildPlan(root, c.Get("project"), c.Get("base"), c.Get("configuration") ?? "Debug", c.Flag("binlog")));
             case "dotnet test-plan": return Result.Ok(await DotnetFacts.TestPlan(root, c.Get("project"), c.Get("base"), c.Get("configuration") ?? "Debug", new(c.Get("test"), c.Get("class"), c.Get("category"), c.Get("filter"))));
-            case "dotnet diagnostics-plan": return Result.Ok(DotnetFacts.DiagnosticsPlan(c.Get("process-id")));
+            case "dotnet diagnostics-plan": return Result.Ok(await DotnetFacts.DiagnosticsPlan(c.Get("process-id"), c.Get("signal"), c.Get("duration-seconds"), root));
             case "logs summarize":
                 return Result.Ok(Output.SummarizeFile(c.Require("file"), settings.Output));
             case "sarif summarize": return Result.Ok(Output.Sarif(c.Require("file"), settings.Output));
@@ -379,7 +380,7 @@ public sealed class Cli
             "dotnet inspect" => ["project"],
             "dotnet build-plan" => ["base", "project", "configuration", "binlog"],
             "dotnet test-plan" => ["base", "project", "configuration", "test", "class", "category", "filter"],
-            "dotnet diagnostics-plan" => ["process-id"],
+            "dotnet diagnostics-plan" => ["process-id", "signal", "duration-seconds"],
             "dotnet format" => ["base", "project", "apply"],
             "dotnet dependencies" or "dotnet package-audit" or "dotnet api-check" or "dotnet release-verify" => ["project"],
             "logs summarize" or "sarif summarize" or "test-results summarize" or "coverage summarize" => ["file"],
@@ -397,7 +398,7 @@ public sealed class Cli
     public List<string> Words { get; } = [];
     public Dictionary<string, string?> Options { get; } = new(StringComparer.Ordinal);
     static readonly HashSet<string> Flags = ["json", "help", "dry-run", "bin", "apply", "safe-input", "binlog"];
-    static readonly HashSet<string> Values = ["root", "toolkit", "home", "codex-home", "base", "query", "issue", "branch", "pr", "project", "file", "input", "output", "skill", "results", "configuration", "test", "class", "category", "filter", "process-id"];
+    static readonly HashSet<string> Values = ["root", "toolkit", "home", "codex-home", "base", "query", "issue", "branch", "pr", "project", "file", "input", "output", "skill", "results", "configuration", "test", "class", "category", "filter", "process-id", "signal", "duration-seconds"];
     public string? Get(string name) => Options.GetValueOrDefault(name);
     public bool Flag(string name) => Options.ContainsKey(name);
     public string Require(string name) => Get(name) is { Length: > 0 } v ? v : throw new ArgumentException($"--{name} is required.");
@@ -806,7 +807,7 @@ public static class DotnetFacts
             if (binlog) args.Add($"-bl:.agent-tool/binlogs/{SafeArtifactName(relative)}.binlog");
             commands.Add(Command(args));
         }
-        return new { schemaVersion = 1, kind = "dotnet-build-plan", configuration, baseRef, targets = targets.Select(target => Rel(root, target)), selection = explicitProject is null ? affected!.Reason : "Explicit project or solution.", commands, artifacts = binlog ? new { binlogs = ".agent-tool/binlogs/*.binlog", retention = "Large binary artifacts stay outside model context; summarize separately." } : null };
+        return new { schemaVersion = 1, kind = "dotnet-build-plan", configuration, baseRef, targets = targets.Select(target => Rel(root, target)), selection = explicitProject is null ? affected!.Reason : "Explicit project or solution.", commands, artifacts = binlog ? new { binlogs = ".agent-tool/binlogs/*.binlog", retention = "Large binary artifacts stay outside model context; never send binlogs to JEV or a model.", analysisOrder = new[] { "structured-binlog-query", "bounded-text-log-fallback" }, structuredAnalyzer = "Microsoft.AITools.BinlogMcp (optional upstream integration)" } : null };
     }
 
     public static async Task<object> TestPlan(string root, string? explicitProject, string? baseRef, string configuration, TestSelection requested)
@@ -878,7 +879,7 @@ public static class DotnetFacts
         return ["--filter", expression];
     }
 
-    public static object DiagnosticsPlan(string? processId)
+    public static async Task<object> DiagnosticsPlan(string? processId, string? requestedSignal = null, string? requestedDurationSeconds = null, string? workingDirectory = null)
     {
         int? pid = null;
         if (processId is not null)
@@ -886,15 +887,37 @@ public static class DotnetFacts
             if (!int.TryParse(processId, NumberStyles.None, CultureInfo.InvariantCulture, out var parsed) || parsed <= 0) throw new ArgumentException("--process-id must be a positive integer.");
             pid = parsed;
         }
+        var signal = requestedSignal ?? "counters";
+        if (signal is not ("counters" or "cpu" or "contention" or "allocations" or "managed-memory" or "crash" or "hang"))
+            throw new ArgumentException("--signal must be counters, cpu, contention, allocations, managed-memory, crash, or hang.");
+        var durationSeconds = 30;
+        if (requestedDurationSeconds is not null && (!int.TryParse(requestedDurationSeconds, NumberStyles.None, CultureInfo.InvariantCulture, out durationSeconds) || durationSeconds is < 5 or > 300))
+            throw new ArgumentException("--duration-seconds must be an integer from 5 through 300.");
         var tools = new[] { "dotnet-counters", "dotnet-trace", "dotnet-dump", "dotnet-gcdump", "dotnet-monitor" }.Select(name => new { name, available = Processes.OnPath(name) }).ToArray();
-        var plans = pid is null ? Array.Empty<object>() :
-        [
-            ToolCommand("dotnet-counters", "monitor", "--process-id", pid.Value.ToString(CultureInfo.InvariantCulture)),
-            ToolCommand("dotnet-trace", "collect", "--process-id", pid.Value.ToString(CultureInfo.InvariantCulture), "--output", ".agent-tool/traces/process.nettrace"),
-            ToolCommand("dotnet-gcdump", "collect", "--process-id", pid.Value.ToString(CultureInfo.InvariantCulture), "--output", ".agent-tool/traces/process.gcdump"),
-            ToolCommand("dotnet-dump", "collect", "--process-id", pid.Value.ToString(CultureInfo.InvariantCulture), "--output", ".agent-tool/traces/process.dmp")
-        ];
-        return new { schemaVersion = 1, kind = "dotnet-diagnostics-plan", processId = pid, tools, plans, safety = "Collection can expose secrets and personal data. Keep artifacts local, inspect size and sensitivity, and pass only bounded summaries to models." };
+        var dotnetVersion = await Processes.Run("dotnet", ["--version"], workingDirectory ?? Environment.CurrentDirectory);
+        var runtimes = await Processes.Run("dotnet", ["--list-runtimes"], workingDirectory ?? Environment.CurrentDirectory);
+        var duration = TimeSpan.FromSeconds(durationSeconds).ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture);
+        object[] plans = pid is null ? [] : signal switch
+        {
+            "counters" => [ToolCommand("dotnet-counters", "monitor", "--process-id", pid.Value.ToString(CultureInfo.InvariantCulture), "--duration", duration)],
+            "managed-memory" => [ToolCommand("dotnet-gcdump", "collect", "--process-id", pid.Value.ToString(CultureInfo.InvariantCulture), "--output", $".agent-tool/traces/process-{pid}-memory.gcdump")],
+            "crash" or "hang" => [ToolCommand("dotnet-dump", "collect", "--process-id", pid.Value.ToString(CultureInfo.InvariantCulture), "--output", $".agent-tool/traces/process-{pid}-{signal}.dmp")],
+            _ => [ToolCommand("dotnet-trace", "collect", "--process-id", pid.Value.ToString(CultureInfo.InvariantCulture), "--duration", duration, "--output", $".agent-tool/traces/process-{pid}-{signal}.nettrace")]
+        };
+        var selectedTool = signal switch { "counters" => "dotnet-counters", "managed-memory" => "dotnet-gcdump", "crash" or "hang" => "dotnet-dump", _ => "dotnet-trace" };
+        return new
+        {
+            schemaVersion = 1,
+            kind = "dotnet-diagnostics-plan",
+            processId = pid,
+            signal,
+            durationSeconds,
+            environment = new { os = RuntimeInformation.OSDescription, processArchitecture = RuntimeInformation.ProcessArchitecture.ToString(), osArchitecture = RuntimeInformation.OSArchitecture.ToString(), runtime = RuntimeInformation.FrameworkDescription, sdk = dotnetVersion.ExitCode == 0 ? dotnetVersion.Output.Trim() : null, installedRuntimes = Lines(runtimes) },
+            tools,
+            collection = new { selectedTool, available = tools.Single(tool => tool.name == selectedTool).available, plans, artifactDirectory = ".agent-tool/traces", executesCollection = false },
+            analysis = new { order = new[] { "existing-artifact", "bounded-structured-analysis", "collect-smallest-missing-signal" }, modelsReceive = "bounded sanitized summaries only" },
+            safety = "Collection can expose secrets and personal data. Keep traces and dumps local, inspect size and sensitivity, and never send raw binary artifacts to JEV or a model."
+        };
     }
 
     static string[] ResolveTargets(string root, string path)

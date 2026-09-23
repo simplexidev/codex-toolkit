@@ -1,0 +1,6 @@
+interface:
+  display_name: "Diagnose .NET"
+  short_description: Diagnose a reported .NET crash, hang, contention, allocation, GC, or memory issue.
+  default_prompt: "Use $diagnose-dotnet."
+policy:
+  allow_implicit_invocation: true

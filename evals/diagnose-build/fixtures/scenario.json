@@ -1,0 +1,6 @@
+{
+  "project": "src/App/App.csproj",
+  "artifact": ".agent-tool/binlogs/src-App-App.csproj.binlog",
+  "consoleTail": "MSB3073 followed by CS0246",
+  "binlogAvailable": true
+}
