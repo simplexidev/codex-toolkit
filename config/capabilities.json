@@ -1,0 +1,538 @@
+{
+  "$schema": "../schemas/capabilities.schema.json",
+  "manifestVersion": 1,
+  "owner": "simplexidev/codex-toolkit",
+  "generatedFrom": "develop/v2.0.0 capability audit",
+  "layerOrder": ["deterministic", "jev", "agent", "stronger-agent"],
+  "summary": { "total": 31, "supported": 10, "partial": 17, "gap": 4 },
+  "capabilities": [
+    {
+      "id": "repo-navigation-impact",
+      "title": "Repository navigation and impact",
+      "tasks": ["locate files", "list changed files", "map affected .NET projects"],
+      "coverage": "supported",
+      "existingSupport": [
+        { "kind": "agent-tool", "id": "repo locate", "scope": "Bounded tracked and unignored path-name search." },
+        { "kind": "agent-tool", "id": "repo changed-files", "scope": "Merge-base-aware changed-file inventory." },
+        { "kind": "agent-tool", "id": "repo affected-projects", "scope": "Maps changes to .NET project and test dependencies." }
+      ],
+      "opportunities": { "deterministic": "Keep path and project graph discovery in AgentTool; use rg for symbols.", "jev": "No fit for exact path or graph facts.", "agent": "Interpret impact after deterministic narrowing." },
+      "routing": { "primary": "deterministic", "fallback": ["agent"], "reason": "Paths and project references are exact repository facts." },
+      "staticCost": { "level": "none", "activation": "none", "loads": [], "concern": "Commands need no skill activation; avoid loading broad repository maps." },
+      "gaps": ["Non-.NET dependency graphs are not modeled."],
+      "duplication": ["dotnet-verify consumes affected-project output without duplicating discovery."],
+      "recommendedAction": "Retain command-only routing and add graph types only when an owned runtime needs them."
+    },
+    {
+      "id": "git-local-state",
+      "title": "Local Git safety and commit preparation",
+      "tasks": ["inspect worktree", "check staged scope", "prepare commits"],
+      "coverage": "supported",
+      "existingSupport": [
+        { "kind": "agent-tool", "id": "git state", "scope": "Structured branch, status and operation state." },
+        { "kind": "agent-tool", "id": "git prepare-commit", "scope": "Safety and whitespace checks without committing." },
+        { "kind": "skill", "id": "prepare-commit", "scope": "Explicit staging and unrelated-work preservation guidance." }
+      ],
+      "opportunities": { "deterministic": "Keep state, diff and whitespace facts structured.", "jev": "No fit for Git facts or authorization.", "agent": "Judge intended scope and compose the commit." },
+      "routing": { "primary": "deterministic", "fallback": ["agent"], "reason": "Git state is exact; intent remains an agent decision." },
+      "staticCost": { "level": "low", "activation": "implicit", "loads": ["prepare-commit"], "concern": "Load one compact skill only at commit time." },
+      "gaps": ["No commit or push mutation is intentionally automated."],
+      "duplication": ["finish-pr repeats final Git safety checks by design."],
+      "recommendedAction": "Keep the mutation boundary caller-controlled."
+    },
+    {
+      "id": "github-issues",
+      "title": "GitHub issues",
+      "tasks": ["inspect an issue", "start an issue branch", "triage issue metadata"],
+      "coverage": "partial",
+      "existingSupport": [
+        { "kind": "agent-tool", "id": "git issue-start", "scope": "Validates an open issue and creates a safe local branch." },
+        { "kind": "skill", "id": "issue-start", "scope": "Narrow branch-start workflow." },
+        { "kind": "skill", "id": "roadmap-next", "scope": "Selects from bounded issue and dependency metadata." }
+      ],
+      "opportunities": { "deterministic": "Add a read-only issue-summary command only if repeated platform output proves noisy.", "jev": "Choice can break ties in sanitized issue prose after metadata filtering.", "agent": "Understand requirements, ask clarifying questions and plan work." },
+      "routing": { "primary": "deterministic", "fallback": ["jev", "agent"], "reason": "State and dependency metadata narrow candidates before semantic interpretation." },
+      "staticCost": { "level": "low", "activation": "explicit", "loads": ["issue-start", "roadmap-next"], "concern": "Do not activate roadmap selection for ordinary issue work." },
+      "gaps": ["No structured issue read, create, edit, label or close support."],
+      "duplication": ["roadmap-next and issue-start are sequential, not competing workflows."],
+      "recommendedAction": "Measure gh issue-output failures before adding one consolidated GitHub work-management skill."
+    },
+    {
+      "id": "github-pull-requests",
+      "title": "GitHub pull requests",
+      "tasks": ["prepare a PR", "inspect PR status", "create or update a PR"],
+      "coverage": "partial",
+      "existingSupport": [
+        { "kind": "agent-tool", "id": "github prepare-pr", "scope": "Local safety and whitespace preparation." },
+        { "kind": "agent-tool", "id": "github pr-status", "scope": "Structured current PR status and checks." },
+        { "kind": "skill", "id": "finish-pr", "scope": "Authorized commit, push and PR workflow." }
+      ],
+      "opportunities": { "deterministic": "Normalize bounded PR metadata and check summaries.", "jev": "No fit for merge authority or exact check state.", "agent": "Write summaries and perform authorized platform mutations." },
+      "routing": { "primary": "deterministic", "fallback": ["agent"], "reason": "Preparation and status precede agent-authored PR content." },
+      "staticCost": { "level": "low", "activation": "explicit", "loads": ["finish-pr"], "concern": "Explicit activation prevents premature external mutations." },
+      "gaps": ["AgentTool intentionally does not create, update or merge PRs."],
+      "duplication": ["prepare-commit and finish-pr share safety checks."],
+      "recommendedAction": "Retain the authority boundary; improve status normalization with evidence from real failures."
+    },
+    {
+      "id": "github-reviews",
+      "title": "GitHub reviews",
+      "tasks": ["read review comments", "triage feedback", "address findings"],
+      "coverage": "supported",
+      "existingSupport": [
+        { "kind": "agent-tool", "id": "github review-comments", "scope": "Downloads paginated inline PR comments to a bounded artifact." },
+        { "kind": "skill", "id": "address-pr-review", "scope": "Evidence-backed dispositions and targeted fixes." },
+        { "kind": "agent", "id": "reviewer", "scope": "Independent read-only review for requested or high-risk diffs." }
+      ],
+      "opportunities": { "deterministic": "Preserve IDs, paths, lines and resolution state.", "jev": "Categorize only large sanitized comment sets; never dismiss security or uncertain feedback.", "agent": "Validate each finding against code and implement warranted fixes." },
+      "routing": { "primary": "deterministic", "fallback": ["jev", "agent", "stronger-agent"], "reason": "Exact comment retrieval precedes optional clustering and code reasoning." },
+      "staticCost": { "level": "medium", "activation": "implicit", "loads": ["address-pr-review"], "concern": "The reviewer agent loads only for explicit or substantial high-risk review." },
+      "gaps": ["Top-level reviews and conversation threads are not normalized with inline comments."],
+      "duplication": ["Reviewer and address-pr-review have distinct pre-review and post-review roles."],
+      "recommendedAction": "Extend one review-comments surface if missing thread types cause observed misses."
+    },
+    {
+      "id": "github-actions",
+      "title": "GitHub Actions and run diagnostics",
+      "tasks": ["inspect workflow runs", "summarize failed jobs", "retrieve bounded logs", "rerun authorized jobs"],
+      "coverage": "gap",
+      "existingSupport": [
+        { "kind": "agent-tool", "id": "github pr-status", "scope": "Shows PR check rollups but not run or job detail." },
+        { "kind": "agent-tool", "id": "logs summarize", "scope": "Compacts a caller-provided local log." }
+      ],
+      "opportunities": { "deterministic": "Add read-only run, job and failed-log normalization with strict bounds.", "jev": "No fit until deterministic failure excerpts leave a large ambiguous set.", "agent": "Diagnose the first causal failure and decide whether a rerun is justified." },
+      "routing": { "primary": "deterministic", "fallback": ["agent"], "reason": "Run state and logs should be fetched and bounded before diagnosis." },
+      "staticCost": { "level": "none", "activation": "none", "loads": [], "concern": "Do not add always-loaded Actions instructions." },
+      "gaps": ["No run/job/artifact/log inspection command.", "No scoped rerun workflow."],
+      "duplication": ["Generic log summarization can be reused after retrieval."],
+      "recommendedAction": "Prioritize a consolidated github runs command and one CI-triage skill after fixtures define bounds."
+    },
+    {
+      "id": "github-releases",
+      "title": "GitHub releases",
+      "tasks": ["inspect tags and releases", "draft a release", "verify uploaded assets"],
+      "coverage": "partial",
+      "existingSupport": [
+        { "kind": "workflow", "id": "release.yml", "scope": "Builds a source archive, checksum and draft GitHub release for a tag." },
+        { "kind": "agent-tool", "id": "release", "scope": "Creates the toolkit source archive." },
+        { "kind": "skill", "id": "release-verify", "scope": "Enumerates executed and missing release gates." }
+      ],
+      "opportunities": { "deterministic": "Verify release/tag/assets/checksums and packaged identity.", "jev": "No fit for integrity facts.", "agent": "Approve release notes and publication only with authority." },
+      "routing": { "primary": "deterministic", "fallback": ["agent"], "reason": "Release integrity is exact; publication is an authorized action." },
+      "staticCost": { "level": "low", "activation": "explicit", "loads": ["release-verify"], "concern": "Release context should never load for routine validation." },
+      "gaps": ["No command compares remote release assets with local hashes.", "No rollback/yank workflow."],
+      "duplication": ["Release integrity and GitHub release publication share artifacts but not authority."],
+      "recommendedAction": "Add remote asset verification to a future consolidated release inspection command."
+    },
+    {
+      "id": "planning",
+      "title": "Planning and work selection",
+      "tasks": ["select next work", "decompose a change", "respect blockers"],
+      "coverage": "partial",
+      "existingSupport": [
+        { "kind": "skill", "id": "roadmap-next", "scope": "Selects bounded roadmap work from explicit dependency metadata." },
+        { "kind": "agent", "id": "Codex", "scope": "Plans scoped implementation from repository evidence." }
+      ],
+      "opportunities": { "deterministic": "Parse explicit dependency and milestone metadata.", "jev": "Use Choice only for ambiguous sanitized issue prose.", "agent": "Own decomposition, tradeoffs and user alignment." },
+      "routing": { "primary": "deterministic", "fallback": ["jev", "agent", "stronger-agent"], "reason": "Declared ordering is cheaper and more reliable than semantic ranking." },
+      "staticCost": { "level": "low", "activation": "implicit", "loads": ["roadmap-next"], "concern": "Avoid loading roadmap context when the task is already selected." },
+      "gaps": ["No generic planning skill, intentionally; normal agent reasoning covers it."],
+      "duplication": [],
+      "recommendedAction": "Do not create a broad planning skill; add deterministic parsers only for repeated structured formats."
+    },
+    {
+      "id": "scoped-edits-refactors",
+      "title": "Scoped edits and refactors",
+      "tasks": ["make targeted edits", "rename symbols", "refactor implementation"],
+      "coverage": "partial",
+      "existingSupport": [
+        { "kind": "agent", "id": "Codex", "scope": "Searches consumers, edits code and verifies behavior." },
+        { "kind": "agent-tool", "id": "repo changed-files", "scope": "Bounds the resulting diff." },
+        { "kind": "skill", "id": "dotnet-verify", "scope": "Targets affected validation." }
+      ],
+      "opportunities": { "deterministic": "Use language/compiler tools for exact references when available.", "jev": "No fit for code transformation.", "agent": "Own behavior-preserving edits and refactor judgment." },
+      "routing": { "primary": "agent", "fallback": ["stronger-agent"], "reason": "Edits require repository-specific semantic reasoning after deterministic search." },
+      "staticCost": { "level": "none", "activation": "none", "loads": [], "concern": "A generic editing skill would add cost without useful routing signal." },
+      "gaps": ["No native C# language server or structured rename integration."],
+      "duplication": [],
+      "recommendedAction": "Prefer host language services when available; do not add a generic refactor skill."
+    },
+    {
+      "id": "migrations",
+      "title": "Code and configuration migrations",
+      "tasks": ["plan staged migrations", "update consumers", "verify compatibility"],
+      "coverage": "partial",
+      "existingSupport": [
+        { "kind": "skill", "id": "architecture-change", "scope": "Assesses boundaries, migration and operational implications." },
+        { "kind": "skill", "id": "api-compatibility", "scope": "Checks public .NET surface changes." },
+        { "kind": "agent", "id": "Codex", "scope": "Sequences repository-specific changes." }
+      ],
+      "opportunities": { "deterministic": "Inventory consumers, config keys and public symbols.", "jev": "Screen large sanitized migration candidate sets only after exact matching.", "agent": "Design sequencing, compatibility and rollback." },
+      "routing": { "primary": "deterministic", "fallback": ["agent", "stronger-agent"], "reason": "Consumer inventory narrows a reasoning-heavy migration." },
+      "staticCost": { "level": "medium", "activation": "implicit", "loads": ["architecture-change", "api-compatibility"], "concern": "Load only the dimension actually changed." },
+      "gaps": ["No migration-specific rollback or data-migration tooling."],
+      "duplication": ["Architecture and API skills can overlap on public boundary migrations."],
+      "recommendedAction": "Keep migrations compositional; add a skill only for a repeated concrete migration class."
+    },
+    {
+      "id": "dotnet-csharp",
+      "title": ".NET and C# development",
+      "tasks": ["discover projects", "build changed code", "format C#", "apply repository policy"],
+      "coverage": "supported",
+      "existingSupport": [
+        { "kind": "agent-tool", "id": "dotnet verify", "scope": "Restores, builds and tests affected .NET targets." },
+        { "kind": "agent-tool", "id": "dotnet format", "scope": "Checks or applies formatting to changed C# files." },
+        { "kind": "skill", "id": "dotnet-verify", "scope": "Selects targeted validation." },
+        { "kind": "upstream", "id": "dotnet-advanced", "scope": "Optional advanced C# workflows." }
+      ],
+      "opportunities": { "deterministic": "Keep project evaluation, compiler diagnostics and formatting tool-driven.", "jev": "No fit for compiler facts or code generation.", "agent": "Implement and diagnose within project conventions." },
+      "routing": { "primary": "deterministic", "fallback": ["agent", "stronger-agent"], "reason": "Compiler and SDK evidence precede code reasoning." },
+      "staticCost": { "level": "low", "activation": "implicit", "loads": ["dotnet-verify", "dotnet-format"], "concern": "Activate formatting only when C# changes exist." },
+      "gaps": ["Advanced C# assistance depends on host or separately installed upstream capabilities."],
+      "duplication": ["dotnet release-verify is intentionally broader than dotnet verify."],
+      "recommendedAction": "Retain focused skills and reference upstream advanced capabilities rather than vendoring them."
+    },
+    {
+      "id": "tests",
+      "title": "Test execution and quality",
+      "tasks": ["run affected tests", "assess assertions", "measure coverage", "mutation test"],
+      "coverage": "supported",
+      "existingSupport": [
+        { "kind": "agent-tool", "id": "dotnet verify", "scope": "Runs detected affected test projects." },
+        { "kind": "skill", "id": "test-quality", "scope": "Assesses assertions, coverage and optional mutation testing." },
+        { "kind": "upstream", "id": "dotnet-test", "scope": "Optional test-platform-specific workflows." }
+      ],
+      "opportunities": { "deterministic": "Detect platforms and preserve structured test results.", "jev": "No fit for pass/fail or coverage facts.", "agent": "Judge missing behavioral cases and causal failures." },
+      "routing": { "primary": "deterministic", "fallback": ["agent"], "reason": "Test runners produce facts; adequacy needs code reasoning." },
+      "staticCost": { "level": "low", "activation": "implicit", "loads": ["dotnet-verify", "test-quality"], "concern": "Do not load test-quality for every routine test run." },
+      "gaps": ["No unified TRX parser or built-in coverage format normalizer."],
+      "duplication": ["dotnet-verify executes tests; test-quality evaluates their design."],
+      "recommendedAction": "Add structured result parsing only if metrics require cross-run normalization."
+    },
+    {
+      "id": "msbuild",
+      "title": "MSBuild evaluation and failure analysis",
+      "tasks": ["evaluate project properties", "diagnose build failures", "inspect binlogs"],
+      "coverage": "partial",
+      "existingSupport": [
+        { "kind": "agent-tool", "id": "repo health", "scope": "Evaluates selected MSBuild properties against policy." },
+        { "kind": "agent-tool", "id": "logs summarize", "scope": "Compacts text build output." },
+        { "kind": "upstream", "id": "dotnet-msbuild", "scope": "Recommended upstream build-analysis skills." },
+        { "kind": "upstream", "id": "Microsoft.AITools.BinlogMcp", "scope": "On-demand structured binlog inspection reference." }
+      ],
+      "opportunities": { "deterministic": "Use evaluated properties and a reviewed binlog parser.", "jev": "No fit for exact build graph facts.", "agent": "Connect the first causal diagnostic to source or configuration." },
+      "routing": { "primary": "deterministic", "fallback": ["agent", "stronger-agent"], "reason": "MSBuild evaluation executes exact project logic but causal diagnosis may be complex." },
+      "staticCost": { "level": "none", "activation": "none", "loads": [], "concern": "Keep optional binlog tooling out of the default plugin context." },
+      "gaps": ["No built-in binlog query surface.", "Text summaries are not MSBuild-structure aware."],
+      "duplication": ["repo-health covers policy properties, not general binlog diagnostics."],
+      "recommendedAction": "Use the upstream integration first; add a narrow AgentTool adapter only with a stable API and fixtures."
+    },
+    {
+      "id": "diagnostics",
+      "title": "Runtime diagnostics and performance investigation",
+      "tasks": ["collect counters or traces", "inspect dumps", "diagnose CPU, GC or memory regressions"],
+      "coverage": "partial",
+      "existingSupport": [
+        { "kind": "skill", "id": "diagnostics", "scope": "Selects bounded .NET diagnostics and protects dump sensitivity." },
+        { "kind": "skill", "id": "performance-investigation", "scope": "Evidence-led regression diagnosis." },
+        { "kind": "upstream", "id": "dotnet-diag", "scope": "Optional diagnostic collection workflows." },
+        { "kind": "agent-tool", "id": "results context", "scope": "Selects a caller-designated durable artifact without history scans." }
+      ],
+      "opportunities": { "deterministic": "Parse counters and trace summaries when stable local formats are available.", "jev": "No fit for sensitive raw artifacts or exact measurements.", "agent": "Form and test causal hypotheses from bounded evidence." },
+      "routing": { "primary": "deterministic", "fallback": ["agent", "stronger-agent"], "reason": "Measurements lead; difficult causal diagnosis may justify stronger reasoning." },
+      "staticCost": { "level": "medium", "activation": "implicit", "loads": ["diagnostics", "performance-investigation"], "concern": "Choose collection or investigation, not both by default." },
+      "gaps": ["AgentTool does not collect or parse diagnostics directly."],
+      "duplication": ["Diagnostics chooses evidence; performance-investigation follows evidence to cause."],
+      "recommendedAction": "Keep collection on demand and add parsers only for safe, bounded summaries."
+    },
+    {
+      "id": "dependencies",
+      "title": "Dependency changes",
+      "tasks": ["change package versions", "inspect transitive deltas", "verify restores"],
+      "coverage": "supported",
+      "existingSupport": [
+        { "kind": "skill", "id": "dependency-change", "scope": "Coordinates central versions, restore, audit and tests." },
+        { "kind": "agent-tool", "id": "dotnet package-audit", "scope": "Reports vulnerable resolved packages." },
+        { "kind": "workflow", "id": "dependabot.yml", "scope": "Weekly NuGet and Actions update proposals." }
+      ],
+      "opportunities": { "deterministic": "Use restore graphs and package metadata for exact deltas.", "jev": "No fit for versions or advisory facts.", "agent": "Assess compatibility and update code/tests." },
+      "routing": { "primary": "deterministic", "fallback": ["agent"], "reason": "Resolved graphs and advisories must be tool-derived." },
+      "staticCost": { "level": "low", "activation": "implicit", "loads": ["dependency-change"], "concern": "Activate only when package references or central versions change." },
+      "gaps": ["No general before/after dependency graph diff."],
+      "duplication": ["package-audit is a focused security subset of dependency-change."],
+      "recommendedAction": "Add graph-delta output to the existing command family if dependency reviews need it."
+    },
+    {
+      "id": "vulnerabilities",
+      "title": "Dependency vulnerability auditing",
+      "tasks": ["query vulnerable transitive packages", "report advisories", "fail unsafe validation"],
+      "coverage": "supported",
+      "existingSupport": [
+        { "kind": "agent-tool", "id": "dotnet package-audit", "scope": "Structured NuGet audit with nonzero vulnerable status." },
+        { "kind": "skill", "id": "package-audit", "scope": "Preserves advisory and affected-project evidence." },
+        { "kind": "skill", "id": "security-scan", "scope": "Combines audit with configured analyzers." }
+      ],
+      "opportunities": { "deterministic": "Keep advisory matching and severity exact.", "jev": "Never replace advisory metadata or downgrade findings.", "agent": "Choose remediation with compatibility evidence." },
+      "routing": { "primary": "deterministic", "fallback": ["agent"], "reason": "Security advisory data is authoritative structured evidence." },
+      "staticCost": { "level": "low", "activation": "explicit", "loads": ["package-audit"], "concern": "Explicit audit avoids unnecessary restores and network work." },
+      "gaps": ["Coverage is NuGet-focused; other ecosystems are outside current product scope."],
+      "duplication": ["release-verify includes audit but does not replace the focused report."],
+      "recommendedAction": "Keep one NuGet audit implementation and reuse it across workflows."
+    },
+    {
+      "id": "licenses",
+      "title": "Dependency license compliance",
+      "tasks": ["inventory dependency licenses", "detect policy conflicts", "produce notices"],
+      "coverage": "gap",
+      "existingSupport": [
+        { "kind": "upstream", "id": "tools.json license labels", "scope": "Informational project-level labels for optional integrations only." },
+        { "kind": "config", "id": "THIRD-PARTY-NOTICES.md", "scope": "Static notices, not a resolved dependency audit." }
+      ],
+      "opportunities": { "deterministic": "Resolve package identity, license expression/file and policy allow/deny results.", "jev": "No fit for legal facts; at most classify already-normalized human review notes.", "agent": "Escalate ambiguous licenses and explain obligations without giving legal conclusions." },
+      "routing": { "primary": "deterministic", "fallback": ["agent"], "reason": "Inventory and policy matching must be reproducible; ambiguity needs human review." },
+      "staticCost": { "level": "none", "activation": "none", "loads": [], "concern": "Do not embed license catalogs in skill context." },
+      "gaps": ["No resolved package license inventory.", "No repository license policy or notice generation."],
+      "duplication": ["SBOM package identity could feed license inventory but does not prove compliance."],
+      "recommendedAction": "Define a machine-readable license policy and one deterministic inventory/report path before adding a narrow compliance skill."
+    },
+    {
+      "id": "security-sarif",
+      "title": "Security analysis and SARIF triage",
+      "tasks": ["run analyzers", "summarize SARIF", "triage findings", "validate fixes"],
+      "coverage": "supported",
+      "existingSupport": [
+        { "kind": "agent-tool", "id": "sarif summarize", "scope": "Bounded rule, severity and location summary." },
+        { "kind": "skill", "id": "security-scan", "scope": "Coordinates configured analyzers and evidence-backed triage." },
+        { "kind": "workflow", "id": "codeql.yml", "scope": "C# CodeQL on public repositories and explicit private fallback." },
+        { "kind": "upstream", "id": "DevSkim", "scope": "On-demand security rules and SARIF." }
+      ],
+      "opportunities": { "deterministic": "Preserve rule IDs, severity, suppression and locations.", "jev": "Never downgrade hard findings; optional clustering only after sanitization.", "agent": "Validate exploitability and fix against the originating rule." },
+      "routing": { "primary": "deterministic", "fallback": ["agent", "stronger-agent"], "reason": "Analyzer facts precede security reasoning." },
+      "staticCost": { "level": "low", "activation": "implicit", "loads": ["security-scan"], "concern": "Load only for security requests or relevant findings." },
+      "gaps": ["No SARIF baseline/diff command.", "Configured analyzer execution remains project-specific."],
+      "duplication": ["package audit feeds security-scan but remains a distinct advisory source."],
+      "recommendedAction": "Add deterministic SARIF diffing before any semantic triage expansion."
+    },
+    {
+      "id": "docs-impact",
+      "title": "Documentation impact",
+      "tasks": ["find affected docs", "update examples", "identify migration notes"],
+      "coverage": "partial",
+      "existingSupport": [
+        { "kind": "skill", "id": "docs-impact", "scope": "Maps changed behavior, keys and APIs to documentation references." },
+        { "kind": "agent-tool", "id": "repo changed-files", "scope": "Bounds the code/config change set." },
+        { "kind": "config", "id": "ecosystem.json", "scope": "Declares human docs ownership outside the runtime repository." }
+      ],
+      "opportunities": { "deterministic": "Search exact public names and links first.", "jev": "Screen large sanitized title/excerpt sets with INCLUDE/REVIEW preservation.", "agent": "Determine conceptual impact and write accurate human guidance in the docs repository." },
+      "routing": { "primary": "deterministic", "fallback": ["jev", "agent"], "reason": "Exact references are cheap; semantic impact is bounded afterward." },
+      "staticCost": { "level": "low", "activation": "implicit", "loads": ["docs-impact"], "concern": "Do not preload human documentation into runtime tasks." },
+      "gaps": ["Cross-repository consumer discovery depends on the common workspace being present."],
+      "duplication": ["Runtime references may intentionally overlap topics with separate human explanations."],
+      "recommendedAction": "Keep ownership explicit and let metrics measure missed cross-repository references."
+    },
+    {
+      "id": "architecture",
+      "title": "Architecture decisions",
+      "tasks": ["change component boundaries", "compare alternatives", "assess operational impact"],
+      "coverage": "partial",
+      "existingSupport": [
+        { "kind": "skill", "id": "architecture-change", "scope": "Maps dependencies, extension points, compatibility and migration." },
+        { "kind": "agent", "id": "Codex", "scope": "Performs repository-specific design reasoning." }
+      ],
+      "opportunities": { "deterministic": "Extract project and package dependency direction.", "jev": "No fit for architecture decisions.", "agent": "Compare concrete alternatives; use stronger reasoning only for consequential cross-system tradeoffs." },
+      "routing": { "primary": "agent", "fallback": ["stronger-agent"], "reason": "Architecture requires judgment after exact dependency discovery." },
+      "staticCost": { "level": "low", "activation": "implicit", "loads": ["architecture-change"], "concern": "Narrow trigger prevents routine edits from loading design guidance." },
+      "gaps": ["No general dependency graph exporter."],
+      "duplication": ["API compatibility covers one consequence of architecture change."],
+      "recommendedAction": "Keep one architecture skill; improve deterministic graph evidence rather than split by pattern."
+    },
+    {
+      "id": "api-compatibility",
+      "title": "Public API compatibility",
+      "tasks": ["detect public surface changes", "validate baselines", "assess consumer migration"],
+      "coverage": "supported",
+      "existingSupport": [
+        { "kind": "agent-tool", "id": "dotnet api-check", "scope": "Runs configured API analyzers or package validation and refuses absent gates." },
+        { "kind": "skill", "id": "api-compatibility", "scope": "Reviews actual symbol and baseline changes." },
+        { "kind": "upstream", "id": "PublicApiAnalyzers", "scope": "Recommended baseline enforcement." }
+      ],
+      "opportunities": { "deterministic": "Use compiler/analyzer baselines for symbol facts.", "jev": "No fit for compatibility facts.", "agent": "Assess consumer meaning and versioning decisions." },
+      "routing": { "primary": "deterministic", "fallback": ["agent", "stronger-agent"], "reason": "Analyzer results establish the change; consumer impact may be subtle." },
+      "staticCost": { "level": "low", "activation": "implicit", "loads": ["api-compatibility"], "concern": "Trigger only on actual public surface changes." },
+      "gaps": ["Gate availability is project-configured rather than supplied by the toolkit."],
+      "duplication": ["versioning consumes compatibility outcomes but does not detect them."],
+      "recommendedAction": "Preserve refusal when no baseline exists; never synthesize compatibility confidence."
+    },
+    {
+      "id": "benchmarks",
+      "title": "Benchmarks",
+      "tasks": ["design benchmarks", "run comparable measurements", "report distributions and allocations"],
+      "coverage": "partial",
+      "existingSupport": [
+        { "kind": "skill", "id": "benchmark", "scope": "Defines workload, baseline, environment and reporting rules." },
+        { "kind": "upstream", "id": "BenchmarkDotNet", "scope": "On-demand benchmark framework reference." }
+      ],
+      "opportunities": { "deterministic": "Parse BenchmarkDotNet outputs and compare compatible runs.", "jev": "No fit for numerical significance.", "agent": "Design representative workloads and interpret confounders." },
+      "routing": { "primary": "deterministic", "fallback": ["agent"], "reason": "Measurement is tool-driven; design and interpretation require reasoning." },
+      "staticCost": { "level": "low", "activation": "explicit", "loads": ["benchmark"], "concern": "Explicit activation avoids costly speculative benchmarks." },
+      "gaps": ["No built-in benchmark output parser or regression threshold policy."],
+      "duplication": ["Performance-investigation addresses observed symptoms; benchmark answers controlled questions."],
+      "recommendedAction": "Add result normalization only when metrics defines a stable benchmark schema."
+    },
+    {
+      "id": "packaging",
+      "title": "Package and artifact construction",
+      "tasks": ["pack .NET artifacts", "inspect package contents", "validate metadata"],
+      "coverage": "gap",
+      "existingSupport": [
+        { "kind": "agent-tool", "id": "release", "scope": "Builds the toolkit source ZIP only." },
+        { "kind": "agent-tool", "id": "dotnet release-verify", "scope": "Runs broad project checks but does not pack or inspect packages." }
+      ],
+      "opportunities": { "deterministic": "Pack into a temporary drop and inspect archive paths, metadata, symbols and provenance.", "jev": "No fit for package contents.", "agent": "Interpret project-specific packaging intent." },
+      "routing": { "primary": "deterministic", "fallback": ["agent"], "reason": "Package contents and metadata are exact artifacts." },
+      "staticCost": { "level": "none", "activation": "none", "loads": [], "concern": "Avoid a package skill until one workflow spans recurring package types." },
+      "gaps": ["No dotnet pack workflow.", "No NuGet/artifact content inspection."],
+      "duplication": ["Release verification names packaging-adjacent gates but does not implement them."],
+      "recommendedAction": "Define one artifact-inspection command before a consolidated packaging skill."
+    },
+    {
+      "id": "reproducibility",
+      "title": "Build reproducibility",
+      "tasks": ["inspect deterministic settings", "build in isolated paths", "compare outputs"],
+      "coverage": "partial",
+      "existingSupport": [
+        { "kind": "skill", "id": "reproducible-build", "scope": "Defines two-path verification and diagnostic expectations." },
+        { "kind": "agent-tool", "id": "repo health", "scope": "Checks deterministic MSBuild policy properties." },
+        { "kind": "upstream", "id": "reproducible-builds", "scope": "Optional upstream guidance and tooling." }
+      ],
+      "opportunities": { "deterministic": "Orchestrate isolated builds and hash normalized outputs.", "jev": "No fit for equality or hash facts.", "agent": "Diagnose differing inputs, paths or timestamps." },
+      "routing": { "primary": "deterministic", "fallback": ["agent"], "reason": "Reproducibility requires repeatable execution and byte-level comparison." },
+      "staticCost": { "level": "low", "activation": "explicit", "loads": ["reproducible-build"], "concern": "Duplicate builds are costly and must stay on demand." },
+      "gaps": ["No AgentTool command performs isolated double builds or normalized comparisons."],
+      "duplication": ["repo-health checks configuration, not empirical reproducibility."],
+      "recommendedAction": "Add an opt-in deterministic verifier with explicit artifact bounds."
+    },
+    {
+      "id": "sbom",
+      "title": "Software bill of materials",
+      "tasks": ["generate an SBOM", "validate the manifest", "correlate release dependencies"],
+      "coverage": "partial",
+      "existingSupport": [
+        { "kind": "skill", "id": "sbom", "scope": "Defines release-drop generation and validation workflow." },
+        { "kind": "upstream", "id": "SBOM-Tool", "scope": "On-demand Microsoft SBOM Tool reference." }
+      ],
+      "opportunities": { "deterministic": "Invoke an authorized installed generator and validate SPDX/package correlation.", "jev": "No fit for component identity.", "agent": "Resolve ambiguous source/package relationships." },
+      "routing": { "primary": "deterministic", "fallback": ["agent"], "reason": "Manifest generation and validation must be reproducible." },
+      "staticCost": { "level": "low", "activation": "explicit", "loads": ["sbom"], "concern": "SBOM tooling and release metadata stay out of routine builds." },
+      "gaps": ["No bundled generator, installer or AgentTool adapter."],
+      "duplication": ["Dependency and license inventories may consume SBOM identity but have different policies."],
+      "recommendedAction": "Keep the external tool on demand; add deterministic validation only after a stable output contract."
+    },
+    {
+      "id": "ci",
+      "title": "Continuous integration design and validation",
+      "tasks": ["validate on supported OSes", "enforce formatting", "run metadata and security gates"],
+      "coverage": "partial",
+      "existingSupport": [
+        { "kind": "workflow", "id": "ci.yml", "scope": "Linux/Windows tests, validation, formatting and diff checks." },
+        { "kind": "workflow", "id": "validate-plugin.yml", "scope": "Targeted plugin metadata validation." },
+        { "kind": "workflow", "id": "eval-skills.yml", "scope": "Offline scheduled and manual skill evaluation." },
+        { "kind": "workflow", "id": "jev-integration.yml", "scope": "Scoped live synthetic JEV smoke check." }
+      ],
+      "opportunities": { "deterministic": "Lint workflow syntax, permissions and action pin policy.", "jev": "No fit for gate results.", "agent": "Design gates and diagnose failures from bounded run evidence." },
+      "routing": { "primary": "deterministic", "fallback": ["agent"], "reason": "Workflow configuration and run status are structured." },
+      "staticCost": { "level": "none", "activation": "platform", "loads": [], "concern": "CI behavior should be discovered from changed workflows, not static prompt text." },
+      "gaps": ["No local workflow policy validator.", "Run diagnostics are covered by the GitHub Actions gap."],
+      "duplication": ["CI calls the same validate and test gates available locally."],
+      "recommendedAction": "Add deterministic workflow policy checks to validate only when rules are explicitly configured."
+    },
+    {
+      "id": "release-integrity",
+      "title": "Release integrity and versioning",
+      "tasks": ["verify complete gates", "derive versions", "match tags to artifacts", "check checksums"],
+      "coverage": "partial",
+      "existingSupport": [
+        { "kind": "agent-tool", "id": "dotnet release-verify", "scope": "Restore, build, format, test and audit gate." },
+        { "kind": "skill", "id": "release-verify", "scope": "Requires explicit reporting of executed, skipped and blocked gates." },
+        { "kind": "skill", "id": "versioning", "scope": "Applies existing Git-derived version policy." },
+        { "kind": "workflow", "id": "release.yml", "scope": "Checks tag identity and emits archive plus SHA-256 checksum." }
+      ],
+      "opportunities": { "deterministic": "Emit one release attestation of gates, identities and hashes.", "jev": "No fit for release integrity.", "agent": "Assess intentional exceptions and authorize publication." },
+      "routing": { "primary": "deterministic", "fallback": ["agent"], "reason": "Every integrity claim must point to a gate or artifact fact." },
+      "staticCost": { "level": "medium", "activation": "explicit", "loads": ["release-verify", "versioning"], "concern": "Load only at release or explicit complete-validation time." },
+      "gaps": ["API, SBOM, packaging and reproducibility remain separate optional gates.", "No signed provenance or remote asset verification."],
+      "duplication": ["The broad command composes existing checks and explicitly reports separate gates."],
+      "recommendedAction": "Define a machine-readable release attestation instead of expanding one monolithic command."
+    },
+    {
+      "id": "generated-dead-files",
+      "title": "Generated, stale and dead files",
+      "tasks": ["identify generated outputs", "detect orphaned files", "find dead source or config"],
+      "coverage": "gap",
+      "existingSupport": [
+        { "kind": "agent-tool", "id": "repo locate", "scope": "Finds candidate paths only." },
+        { "kind": "agent-tool", "id": "validate", "scope": "Detects known metadata/reference inconsistencies, not general dead files." }
+      ],
+      "opportunities": { "deterministic": "Combine ignore rules, project inclusion, generated markers, references and known generators.", "jev": "Screen only ambiguous sanitized orphan candidates after exact reachability checks.", "agent": "Confirm intent before deletion and handle reflection/convention risks." },
+      "routing": { "primary": "deterministic", "fallback": ["jev", "agent"], "reason": "Candidate generation must be explainable; deletion needs contextual confirmation." },
+      "staticCost": { "level": "none", "activation": "none", "loads": [], "concern": "A broad dead-code skill would encourage expensive repository scans." },
+      "gaps": ["No generated-file provenance inventory.", "No dead-file or orphan reachability command."],
+      "duplication": ["Validation contains narrow orphan checks that should remain product-specific."],
+      "recommendedAction": "First add a read-only candidate report with evidence and zero deletion behavior."
+    },
+    {
+      "id": "merge-conflict-prep",
+      "title": "Merge and conflict preparation",
+      "tasks": ["estimate conflicts", "prepare integration", "detect unfinished operations", "resolve conflicts safely"],
+      "coverage": "partial",
+      "existingSupport": [
+        { "kind": "agent-tool", "id": "git state", "scope": "Detects merge, rebase, cherry-pick and revert state." },
+        { "kind": "skill", "id": "prepare-commit", "scope": "Refuses unsafe commit preparation." },
+        { "kind": "agent", "id": "Codex", "scope": "Inspects bases and resolves authorized conflicts." }
+      ],
+      "opportunities": { "deterministic": "Compute merge bases, touched-path intersections and merge-tree results without mutation.", "jev": "No fit for Git conflict facts.", "agent": "Resolve semantic conflicts with tests and user intent." },
+      "routing": { "primary": "deterministic", "fallback": ["agent", "stronger-agent"], "reason": "Non-mutating conflict prediction narrows semantic resolution." },
+      "staticCost": { "level": "none", "activation": "none", "loads": [], "concern": "Conflict guidance should load only after a conflict or explicit preparation request." },
+      "gaps": ["No merge-tree/conflict forecast command.", "No dedicated resolution skill."],
+      "duplication": ["Git safety checks already protect unfinished operations."],
+      "recommendedAction": "Add a read-only conflict forecast to the Git command family; keep resolution in agent reasoning."
+    },
+    {
+      "id": "upstream-maintenance",
+      "title": "Upstream integration maintenance",
+      "tasks": ["inventory upstream tools", "detect version drift", "review integration updates"],
+      "coverage": "supported",
+      "existingSupport": [
+        { "kind": "agent-tool", "id": "upstream status", "scope": "Returns reviewed integration and version manifests." },
+        { "kind": "agent-tool", "id": "upstream update", "scope": "Writes a bounded drift report without updating dependencies." },
+        { "kind": "workflow", "id": "update-upstreams.yml", "scope": "Weekly drift artifact." },
+        { "kind": "config", "id": "upstream/*.json", "scope": "References rather than vendored implementations or installation locks." }
+      ],
+      "opportunities": { "deterministic": "Keep remote identity and version comparisons structured.", "jev": "No fit for version drift facts.", "agent": "Review compatibility, license and adoption decisions." },
+      "routing": { "primary": "deterministic", "fallback": ["agent"], "reason": "Drift detection is exact; adoption remains a reviewed decision." },
+      "staticCost": { "level": "none", "activation": "none", "loads": [], "concern": "Manifests are read lazily and never injected globally." },
+      "gaps": ["Drift reports do not open issues or update manifests automatically by design."],
+      "duplication": ["Dependabot owns package/action updates; upstream update owns informational integrations."],
+      "recommendedAction": "Retain report-only automation and explicit review."
+    },
+    {
+      "id": "agent-skill-maintenance",
+      "title": "Agent, skill and plugin maintenance",
+      "tasks": ["validate skills", "maintain activation metadata", "install or update runtime links", "evaluate regressions"],
+      "coverage": "partial",
+      "existingSupport": [
+        { "kind": "skill", "id": "agent-maintenance", "scope": "Maintains installed toolkit instructions, skills, agents and config." },
+        { "kind": "agent-tool", "id": "install/update/uninstall/doctor", "scope": "Owned-link lifecycle with conservative conflict handling." },
+        { "kind": "agent-tool", "id": "validate", "scope": "Checks schemas, metadata, references and release identity." },
+        { "kind": "agent-tool", "id": "eval", "scope": "Runs offline fixtures and optional measured-result regression checks." },
+        { "kind": "upstream", "id": "skill-validator", "scope": "Recommended reviewed upstream validation/evaluation tooling." }
+      ],
+      "opportunities": { "deterministic": "Validate triggers, references, schemas, ownership and static cost metadata.", "jev": "Use only inside explicitly measured semantic routing evaluations.", "agent": "Author minimal instructions and interpret regression evidence." },
+      "routing": { "primary": "deterministic", "fallback": ["agent", "stronger-agent"], "reason": "Structural gates run before qualitative instruction review." },
+      "staticCost": { "level": "low", "activation": "explicit", "loads": ["agent-maintenance"], "concern": "Maintenance instructions must not activate for normal toolkit use." },
+      "gaps": ["Evaluation scenarios remain in the product baseline pending metrics ownership migration.", "No automatic static token-cost measurement for installed routing metadata."],
+      "duplication": ["Local validate and upstream validator overlap structurally; upstream remains optional and independently evolving."],
+      "recommendedAction": "Move evaluator ownership in its designated phase and have metrics ingest this manifest for routing/static-cost measurement."
+    }
+  ]
+}
