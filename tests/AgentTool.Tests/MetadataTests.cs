@@ -84,6 +84,19 @@ public class MetadataTests
         Assert.True(File.Exists(Path.Combine(Root, "plugins/codex-toolkit/references/capability-coverage.md")));
     }
     [Fact]
+    public void AgentToolContractsAreUniqueAndMatchTheCliSurface()
+    {
+        var manifest = JsonNode.Parse(File.ReadAllText(Path.Combine(Root, "config/agent-tool-contracts.json")))!;
+        var contracts = manifest["contracts"]!.AsArray();
+        var commands = contracts.Select(contract => contract!["command"]!.GetValue<string>()).ToArray();
+        var kinds = contracts.Select(contract => contract!["kind"]!.GetValue<string>()).ToArray();
+        Assert.Equal(commands.Length, commands.Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(1, contracts.Select(contract => contract!["schemaVersion"]!.GetValue<int>()).Distinct().Single());
+        var source = File.ReadAllText(Path.Combine(Root, "tools/AgentTool.cs"));
+        Assert.All(commands, command => Assert.Contains($"case \"{command}\"", source, StringComparison.Ordinal));
+        Assert.All(kinds.Distinct(StringComparer.Ordinal), kind => Assert.Contains($"kind = \"{kind}\"", source, StringComparison.Ordinal));
+    }
+    [Fact]
     public void DotnetSkillsProvenanceIsPinnedCompleteAndReferenceOnly()
     {
         var manifest = JsonNode.Parse(File.ReadAllText(Path.Combine(Root, "upstream/dotnet-skills.json")))!;
