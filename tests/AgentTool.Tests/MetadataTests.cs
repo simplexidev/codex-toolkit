@@ -61,6 +61,9 @@ public class MetadataTests
         Assert.Equal(0, result.ExitCode);
         using var zip = System.IO.Compression.ZipFile.OpenRead(archive); var entries = zip.Entries.Select(x => x.FullName).ToArray();
         Assert.Contains("CHANGELOG.md", entries); Assert.Contains("plugins/codex-toolkit/.codex-plugin/plugin.json", entries);
+        Assert.Contains("docs/jev.md", entries);
+        foreach (var humanManual in new[] { "architecture", "configuration", "evaluation", "installation", "model-routing", "project-integration", "release-process", "security", "skill-authoring", "token-efficiency", "troubleshooting", "upstream-integrations" })
+            Assert.DoesNotContain($"docs/{humanManual}.md", entries);
         Assert.DoesNotContain(entries, x => x.StartsWith("tests/", StringComparison.Ordinal) || x.StartsWith(".agent-results/", StringComparison.Ordinal) || x.StartsWith("artifacts/", StringComparison.Ordinal));
     }
     [Fact]
@@ -133,6 +136,18 @@ public class MetadataTests
 
 public class RepositoryIntegrityTests
 {
+    [Fact]
+    public void RuntimeReferenceValidationDetectsBrokenSkillPaths()
+    {
+        using var repo = new TemporaryGitRepository();
+        var skill = Path.Combine(repo.Root, "plugins/codex-toolkit/skills/example");
+        Directory.CreateDirectory(skill);
+        File.WriteAllText(Path.Combine(skill, "SKILL.md"), "Read references/missing.md and [also missing](references/other.md).\n");
+        var errors = RuntimeReferences.Missing(repo.Root);
+        Assert.Contains(errors, error => error.Contains("references/missing.md", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("references/other.md", StringComparison.Ordinal));
+    }
+
     [Fact]
     public void LocalMarkdownLinksResolve()
     {

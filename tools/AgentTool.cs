@@ -1079,6 +1079,42 @@ public static class Installer
     }
 }
 
+public static class RuntimeReferences
+{
+    static readonly Regex MarkdownLink = new(@"\]\(([^)]+)\)", RegexOptions.Compiled);
+    static readonly Regex SkillReference = new(@"(?<![A-Za-z0-9_./-])(references/[A-Za-z0-9_./-]+\.md)\b", RegexOptions.Compiled);
+
+    public static string[] Missing(string root)
+    {
+        var plugin = Path.Combine(root, "plugins", "codex-toolkit");
+        var skills = Path.Combine(plugin, "skills");
+        if (!Directory.Exists(skills)) return ["Missing runtime skills directory: plugins/codex-toolkit/skills"];
+        var errors = new HashSet<string>(StringComparer.Ordinal);
+        var markdown = SafeFiles.Enumerate(plugin).Where(file => file.EndsWith(".md", StringComparison.Ordinal)
+            && (Path.GetFileName(file) == "SKILL.md" || file.Contains(Path.DirectorySeparatorChar + "references" + Path.DirectorySeparatorChar, StringComparison.Ordinal)));
+        foreach (var file in markdown)
+        {
+            var text = File.ReadAllText(file);
+            if (Path.GetFileName(file) == "SKILL.md")
+                foreach (Match match in SkillReference.Matches(text)) Check(file, match.Groups[1].Value, root, errors);
+            foreach (Match match in MarkdownLink.Matches(text))
+            {
+                var target = match.Groups[1].Value.Split('#')[0].Trim('<', '>');
+                if (target.Length == 0 || target.Contains("://", StringComparison.Ordinal) || target.StartsWith("mailto:", StringComparison.OrdinalIgnoreCase)) continue;
+                Check(file, target, root, errors);
+            }
+        }
+        return errors.Order(StringComparer.Ordinal).ToArray();
+    }
+
+    static void Check(string source, string target, string root, HashSet<string> errors)
+    {
+        var resolved = Path.GetFullPath(target, Path.GetDirectoryName(source)!);
+        if (!File.Exists(resolved) && !Directory.Exists(resolved))
+            errors.Add($"Missing runtime reference from {Path.GetRelativePath(root, source)}: {target}");
+    }
+}
+
 public static class Validation
 {
     public static Result Run(string root)
@@ -1117,6 +1153,7 @@ public static class Validation
                 if (!Regex.IsMatch(uiText, @"(?m)^interface:\s*$") || !Regex.IsMatch(uiText, @"(?m)^\s+display_name:\s+\S") || !Regex.IsMatch(uiText, @"(?m)^\s+short_description:\s+\S") || !uiText.Contains("$" + name, StringComparison.Ordinal)) errors.Add($"Invalid skill UI metadata: {skill}");
             }
         }
+        errors.AddRange(RuntimeReferences.Missing(root));
         var nativeNames = new HashSet<string>(StringComparer.Ordinal);
         foreach (var native in Directory.GetFiles(Path.Combine(root, "agents"), "*.toml"))
         {
@@ -1141,7 +1178,7 @@ public static class Validation
             || Directory.GetDirectories(Path.Combine(root, "templates")).Select(Path.GetFileName).Where(x => !string.IsNullOrEmpty(x)).Count() != 1)
             errors.Add("Ecosystem plugin/template topology mismatch.");
         try { Settings.Load(root, _ => null); } catch (ArgumentException e) { errors.Add(e.Message); }
-        return new(errors.Count == 0 ? "ok" : "failed", new { jsonFiles = parsed, errors, note = "Structural validation includes configuration schemas and release identity." }, errors.Count == 0 ? 0 : 1);
+        return new(errors.Count == 0 ? "ok" : "failed", new { jsonFiles = parsed, errors, note = "Structural validation includes configuration schemas, runtime references and release identity." }, errors.Count == 0 ? 0 : 1);
     }
     static void ValidateSchema(JsonNode instance, JsonNode schema, string file, List<string> errors)
     {

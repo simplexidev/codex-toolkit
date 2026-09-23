@@ -11,7 +11,7 @@ into the specific AgentTool process or narrowly scoped terminal session used for
 work. Secret storage and injection are outside AgentTool and the toolkit. Do not place it
 in arguments, files, JSON, `.env`, shell profiles, `environment.d`, keyrings, desktop
 credential stores, or a desktop-session-wide environment. Optional non-secret overrides
-are documented in [configuration](configuration.md). `doctor` reports only
+are defined in `config/jev.json` and its schema. `doctor` reports only
 `JEV credentials: configured` or `JEV credentials: unavailable`. auto and off always preserve normal Codex behavior;
 required reports exit 3 on service failure while still marking the result REVIEW.
 Uncertain valid judgments remain REVIEW. No retries can accidentally multiply billing.
