@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<coverage lines-valid="10" lines-covered="8" line-rate="0.8" branches-valid="4" branches-covered="3" branch-rate="0.75">
+  <packages><package name="Example"><classes><class name="A" filename="src/A.cs" line-rate="0.8" branch-rate="0.75" /></classes></package></packages>
+</coverage>

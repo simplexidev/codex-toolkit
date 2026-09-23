@@ -55,3 +55,13 @@ evidence while performance investigation reasons from it; and release verificati
 orchestrates but does not claim optional API, SBOM, packaging, or reproducibility
 gates. Metrics should track activation precision, static routing cost, unnecessary
 broad operations, fallback rate, and correctness by capability ID.
+
+## Deterministic expansion
+
+The first post-audit expansion adds versioned structured contracts for repository
+summaries and file ownership; .NET SDK, TFM, package and project-graph inspection;
+resolved direct/transitive dependencies; non-executing build, test and diagnostics
+plans; and bounded TRX, JUnit, Cobertura and OpenCover summaries.
+`config/agent-tool-contracts.json` is the compact source
+for metrics consumers. Plans expose executable argument arrays but do not cross
+the existing mutation or sensitive diagnostics-collection boundaries.

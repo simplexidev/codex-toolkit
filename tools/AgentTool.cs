@@ -7,6 +7,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Net.Http.Headers;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -27,12 +28,17 @@ public static class AgentTool
         install | update [--home DIR] [--codex-home DIR] [--dry-run] [--bin]
         uninstall [--home DIR] [--codex-home DIR] [--dry-run]
         doctor
-        repo changed-files [--base REF] | locate --query TEXT | health | affected-projects [--base REF]
-        git state | prepare-commit | issue-start --issue NUMBER --branch NAME
+        repo changed-files [--base REF] | summary [--base REF] | locate --query TEXT | health
+        repo affected-projects [--base REF] | ownership --file PATH
+        git state | summary [--base REF] | prepare-commit | issue-start --issue NUMBER --branch NAME
         github pr-status | review-comments --pr NUMBER | prepare-pr
+        dotnet inspect [--project PATH] | build-plan [--base REF] [--project PATH] [--configuration NAME] [--binlog]
+        dotnet test-plan [--base REF] [--project PATH] [--configuration NAME] [--filter EXPR]
+        dotnet diagnostics-plan [--process-id NUMBER]
         dotnet verify [--base REF] [--project PATH] | format --project PATH [--apply]
-        dotnet package-audit --project PATH | api-check --project PATH | release-verify --project PATH
+        dotnet dependencies --project PATH | package-audit --project PATH | api-check --project PATH | release-verify --project PATH
         logs summarize --file PATH | sarif summarize --file PATH
+        test-results summarize --file PATH | coverage summarize --file PATH
         jev noul|choice|score --input PATH [--dry-run] [--safe-input]
         jev screen --input PATH [--dry-run] [--safe-input] | cache-clear
         upstream status | update [--dry-run]
@@ -108,6 +114,7 @@ public static class AgentTool
                 return Installer.Run(toolkit, c.Get("home") ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), c.Get("codex-home") ?? (c.Get("home") is null ? Environment.GetEnvironmentVariable("CODEX_HOME") : null), command, c.Flag("dry-run"), c.Flag("bin"));
             case "doctor": return await Doctor(toolkit, settings, c);
             case "git state": return Result.Ok(await Git.State(root));
+            case "git summary": return Result.Ok(await Repository.Summary(root, c.Get("base"), settings.Output));
             case "git prepare-commit":
             case "github prepare-pr":
                 await Git.EnsureSafe(root, false);
@@ -123,10 +130,12 @@ public static class AgentTool
                 await Git.Require(root, "switch", "-c", branch);
                 return Result.Ok(new { branch, issue });
             case "repo changed-files": return Result.Ok(await Git.Changed(root, c.Get("base")));
+            case "repo summary": return Result.Ok(await Repository.Summary(root, c.Get("base"), settings.Output));
             case "repo locate":
                 var files = (await Git.Files(root)).Where(x => !SafeFiles.IsDiscoveryExcluded(x)).ToArray();
                 return Result.Ok(new { matches = files.Where(x => x.Contains(c.Require("query"), StringComparison.OrdinalIgnoreCase)).Take(settings.Output.MaxItems), total = files.Count(x => x.Contains(c.Require("query"), StringComparison.OrdinalIgnoreCase)), scope = "Git tracked + untracked, nonignored path names excluding the managed result store; use rg for symbols." });
             case "repo affected-projects": return Result.Ok(await Projects.Affected(root, await Git.Changed(root, c.Get("base"))));
+            case "repo ownership": return Result.Ok(await Projects.Ownership(root, c.Require("file")));
             case "repo health":
                 var health = await Projects.Health(root, settings.Health);
                 return new(health.Count == 0 ? "ok" : "findings", health, health.Count == 0 ? 0 : 1);
@@ -137,12 +146,19 @@ public static class AgentTool
             case "dotnet verify":
             case "dotnet format":
             case "dotnet package-audit":
+            case "dotnet dependencies":
             case "dotnet api-check":
             case "dotnet release-verify":
                 return await Dotnet(command, c, root, artifacts, settings);
+            case "dotnet inspect": return Result.Ok(await DotnetFacts.Inspect(root, c.Get("project")));
+            case "dotnet build-plan": return Result.Ok(await DotnetFacts.BuildPlan(root, c.Get("project"), c.Get("base"), c.Get("configuration") ?? "Debug", c.Flag("binlog")));
+            case "dotnet test-plan": return Result.Ok(await DotnetFacts.TestPlan(root, c.Get("project"), c.Get("base"), c.Get("configuration") ?? "Debug", c.Get("filter")));
+            case "dotnet diagnostics-plan": return Result.Ok(DotnetFacts.DiagnosticsPlan(c.Get("process-id")));
             case "logs summarize":
                 return Result.Ok(Output.SummarizeFile(c.Require("file"), settings.Output));
             case "sarif summarize": return Result.Ok(Output.Sarif(c.Require("file"), settings.Output));
+            case "test-results summarize": return Result.Ok(DotnetArtifacts.TestResults(c.Require("file"), settings.Output));
+            case "coverage summarize": return Result.Ok(DotnetArtifacts.Coverage(c.Require("file"), settings.Output));
             case "jev noul":
             case "jev choice":
             case "jev score":
@@ -204,6 +220,12 @@ public static class AgentTool
                 var args = new List<string> { "format", project, "--include" }; args.AddRange(code);
                 if (!c.Flag("apply")) args.Add("--verify-no-changes");
                 results.Add(await RunArtifact("dotnet", args, root, artifacts, settings.Output));
+            }
+            else if (command == "dotnet dependencies")
+            {
+                var r = await RunArtifact("dotnet", ["package", "list", "--project", project, "--include-transitive", "--format", "json", "--output-version", "1"], root, artifacts, settings.Output);
+                if (r.ExitCode == 0 && r.Data is ProcessReport p) r = Result.Ok(DotnetArtifacts.Dependencies(p.Artifact, root, settings.Output));
+                results.Add(r);
             }
             else if (command == "dotnet package-audit")
             {
@@ -347,14 +369,19 @@ public sealed class Cli
             "install" or "update" => ["home", "codex-home", "dry-run", "bin"],
             "uninstall" => ["home", "codex-home", "dry-run"],
             "doctor" => ["home", "codex-home"],
-            "repo changed-files" or "repo affected-projects" => ["base"],
+            "repo changed-files" or "repo affected-projects" or "repo summary" or "git summary" => ["base"],
             "repo locate" => ["query"],
+            "repo ownership" => ["file"],
             "git issue-start" => ["issue", "branch"],
             "github review-comments" => ["pr"],
             "dotnet verify" => ["base", "project"],
+            "dotnet inspect" => ["project"],
+            "dotnet build-plan" => ["base", "project", "configuration", "binlog"],
+            "dotnet test-plan" => ["base", "project", "configuration", "filter"],
+            "dotnet diagnostics-plan" => ["process-id"],
             "dotnet format" => ["base", "project", "apply"],
-            "dotnet package-audit" or "dotnet api-check" or "dotnet release-verify" => ["project"],
-            "logs summarize" or "sarif summarize" => ["file"],
+            "dotnet dependencies" or "dotnet package-audit" or "dotnet api-check" or "dotnet release-verify" => ["project"],
+            "logs summarize" or "sarif summarize" or "test-results summarize" or "coverage summarize" => ["file"],
             "jev noul" or "jev choice" or "jev score" or "jev screen" => ["input", "dry-run", "safe-input"],
             "upstream update" => ["dry-run"],
             "eval" => ["skill", "results"],
@@ -368,8 +395,8 @@ public sealed class Cli
     }
     public List<string> Words { get; } = [];
     public Dictionary<string, string?> Options { get; } = new(StringComparer.Ordinal);
-    static readonly HashSet<string> Flags = ["json", "help", "dry-run", "bin", "apply", "safe-input"];
-    static readonly HashSet<string> Values = ["root", "toolkit", "home", "codex-home", "base", "query", "issue", "branch", "pr", "project", "file", "input", "output", "skill", "results"];
+    static readonly HashSet<string> Flags = ["json", "help", "dry-run", "bin", "apply", "safe-input", "binlog"];
+    static readonly HashSet<string> Values = ["root", "toolkit", "home", "codex-home", "base", "query", "issue", "branch", "pr", "project", "file", "input", "output", "skill", "results", "configuration", "filter", "process-id"];
     public string? Get(string name) => Options.GetValueOrDefault(name);
     public bool Flag(string name) => Options.ContainsKey(name);
     public string Require(string name) => Get(name) is { Length: > 0 } v ? v : throw new ArgumentException($"--{name} is required.");
@@ -499,6 +526,36 @@ public static class Git
 }
 public record GitState(string Root, string? Branch, bool Clean, List<string> Operations, string[] Entries);
 
+public static class Repository
+{
+    public static async Task<object> Summary(string root, string? baseRef, OutputSettings limits)
+    {
+        var state = await Git.State(root);
+        var changed = await Git.Changed(root, baseRef);
+        var upstream = await Processes.Run("git", ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"], root);
+        int? ahead = null, behind = null; string? upstreamName = null;
+        if (upstream.ExitCode == 0)
+        {
+            upstreamName = upstream.Output.Trim();
+            var divergence = await Processes.Run("git", ["rev-list", "--left-right", "--count", $"HEAD...{upstreamName}"], root);
+            var counts = divergence.Output.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+            if (divergence.ExitCode == 0 && counts.Length == 2 && int.TryParse(counts[0], out var local) && int.TryParse(counts[1], out var remote)) { ahead = local; behind = remote; }
+        }
+        var byExtension = changed.GroupBy(path => Path.GetExtension(path).ToLowerInvariant() is { Length: > 0 } extension ? extension : "(none)", StringComparer.Ordinal)
+            .OrderByDescending(group => group.Count()).ThenBy(group => group.Key, StringComparer.Ordinal).ToDictionary(group => group.Key, group => group.Count(), StringComparer.Ordinal);
+        var byArea = changed.GroupBy(path => path.Replace('\\', '/').Split('/', 2)[0], StringComparer.Ordinal)
+            .OrderByDescending(group => group.Count()).ThenBy(group => group.Key, StringComparer.Ordinal).ToDictionary(group => group.Key, group => group.Count(), StringComparer.Ordinal);
+        return new
+        {
+            schemaVersion = 1,
+            kind = "repository-summary",
+            state = new { state.Branch, state.Clean, state.Operations, entries = state.Entries.Take(limits.MaxItems), entriesTruncated = state.Entries.Length > limits.MaxItems },
+            upstream = new { name = upstreamName, ahead, behind },
+            changes = new { baseRef, count = changed.Length, files = changed.Take(limits.MaxItems), truncated = changed.Length > limits.MaxItems, byExtension, byArea }
+        };
+    }
+}
+
 public static class Results
 {
     static readonly Dictionary<string, string> Persistent = new(StringComparer.Ordinal) { ["audit"] = "audits", ["handoff"] = "handoffs", ["review"] = "reviews", ["report"] = "reports" };
@@ -590,9 +647,19 @@ public static class Projects
 {
     public static string[] Discover(string root) => SafeFiles.Enumerate(root).Where(x => Path.GetExtension(x) is ".csproj" or ".fsproj" or ".vbproj").Order(StringComparer.Ordinal).ToArray();
     public static string[] Solutions(string root) => SafeFiles.Enumerate(root).Where(x => Path.GetExtension(x) is ".sln" or ".slnx").Order(StringComparer.Ordinal).ToArray();
+    public static async Task<string[]> InSolution(string root, string solution)
+    {
+        var full = Path.GetFullPath(solution, root); if (!File.Exists(full)) throw new ArgumentException("Solution does not exist.");
+        var result = await Processes.Run("dotnet", ["sln", full, "list"], root);
+        if (result.ExitCode != 0) throw new InvalidOperationException($"Could not list projects in {Path.GetFileName(full)}.");
+        var directory = Path.GetDirectoryName(full)!;
+        return result.Output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(line => Path.GetExtension(line.Trim('"')) is ".csproj" or ".fsproj" or ".vbproj")
+            .Select(line => Path.GetFullPath(line.Trim('"'), directory)).Where(File.Exists).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
+    }
     public static async Task<JsonNode> Evaluate(string root, string project)
     {
-        var result = await Processes.Run("dotnet", ["msbuild", project, "-nologo", "-getProperty:TargetFramework,TargetFrameworks,IsTestProject,Nullable,ManagePackageVersionsCentrally,Deterministic,EnableNETAnalyzers,RestorePackagesWithLockFile,EnablePackageValidation,PackageValidationBaselineVersion", "-getItem:ProjectReference,Compile,PackageReference"], root);
+        var result = await Processes.Run("dotnet", ["msbuild", project, "-nologo", "-getProperty:TargetFramework,TargetFrameworks,IsTestProject,Nullable,ManagePackageVersionsCentrally,Deterministic,EnableNETAnalyzers,RestorePackagesWithLockFile,EnablePackageValidation,PackageValidationBaselineVersion,IsTestingPlatformApplication,TestingPlatformDotnetTestSupport,UseMicrosoftTestingPlatformRunner", "-getItem:ProjectReference,Compile,PackageReference"], root);
         if (result.ExitCode != 0) throw new InvalidOperationException($"MSBuild evaluation failed for {Path.GetFileName(project)}; graph cannot safely be narrowed.");
         return JsonNode.Parse(result.Output) ?? throw new InvalidOperationException("Empty MSBuild response.");
     }
@@ -635,14 +702,46 @@ public static class Projects
     public static async Task<string[]> DependentTests(string root, string project)
     {
         var target = Path.GetFullPath(project);
-        var tests = new List<string>();
-        foreach (var candidate in Discover(root))
+        var projects = Discover(root); var references = new Dictionary<string, string[]>(StringComparer.Ordinal); var tests = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var candidate in projects)
         {
-            if (!await IsTest(root, candidate)) continue;
-            var references = (await Evaluate(root, candidate))["Items"]?["ProjectReference"]?.AsArray().Select(x => x?["FullPath"]?.GetValue<string>()).OfType<string>() ?? [];
-            if (references.Any(reference => string.Equals(Path.GetFullPath(reference), target, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))) tests.Add(candidate);
+            var evaluation = await Evaluate(root, candidate);
+            references[candidate] = evaluation["Items"]?["ProjectReference"]?.AsArray().Select(x => Path.GetFullPath(x?["FullPath"]?.GetValue<string>() ?? "", root)).Where(File.Exists).ToArray() ?? [];
         }
+        bool DependsOn(string candidate, string wanted, HashSet<string> visiting)
+        {
+            if (!visiting.Add(candidate)) return false;
+            return references[candidate].Any(reference => string.Equals(reference, wanted, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)
+                || references.ContainsKey(reference) && DependsOn(reference, wanted, visiting));
+        }
+        foreach (var candidate in projects) if (await IsTest(root, candidate) && DependsOn(candidate, target, [])) tests.Add(candidate);
         return tests.Order(StringComparer.Ordinal).ToArray();
+    }
+    public static async Task<object> Ownership(string root, string file)
+    {
+        root = Path.GetFullPath(root); var full = Path.GetFullPath(file, root); var relative = Path.GetRelativePath(root, full).Replace('\\', '/');
+        if (relative == ".." || relative.StartsWith("../", StringComparison.Ordinal)) throw new ArgumentException("File must be inside the repository root.");
+        var projects = Discover(root); var compileOwners = new List<string>(); var directoryOwners = new List<string>();
+        foreach (var project in projects)
+        {
+            var evaluation = await Evaluate(root, project);
+            var compiles = evaluation["Items"]?["Compile"]?.AsArray().Select(item => item?["FullPath"]?.GetValue<string>()).OfType<string>() ?? [];
+            if (compiles.Any(path => string.Equals(Path.GetFullPath(path), full, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))) compileOwners.Add(project);
+            var directory = Path.GetDirectoryName(project)!;
+            if (full.StartsWith(directory + Path.DirectorySeparatorChar, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)) directoryOwners.Add(project);
+        }
+        var owners = compileOwners.Count > 0 ? compileOwners : directoryOwners.OrderByDescending(path => Path.GetDirectoryName(path)!.Length).Take(1).ToList();
+        var impacted = new HashSet<string>(owners, StringComparer.Ordinal);
+        foreach (var owner in owners) foreach (var dependent in await Dependents(root, owner)) impacted.Add(dependent);
+        string Rel(string path) => Path.GetRelativePath(root, path).Replace('\\', '/');
+        return new { schemaVersion = 1, kind = "file-ownership", file = relative, exists = File.Exists(full), basis = compileOwners.Count > 0 ? "evaluated-compile-item" : owners.Count > 0 ? "nearest-project-directory" : "unowned", owners = owners.Select(Rel), impactedProjects = impacted.Order(StringComparer.Ordinal).Select(Rel) };
+    }
+    public static async Task<string[]> Dependents(string root, string project)
+    {
+        var projects = Discover(root); var selected = new HashSet<string>(StringComparer.Ordinal) { Path.GetFullPath(project) }; var references = new Dictionary<string, string[]>(StringComparer.Ordinal);
+        foreach (var candidate in projects) references[candidate] = (await Evaluate(root, candidate))["Items"]?["ProjectReference"]?.AsArray().Select(x => Path.GetFullPath(x?["FullPath"]?.GetValue<string>() ?? "", root)).Where(File.Exists).ToArray() ?? [];
+        bool added; do { added = false; foreach (var candidate in projects) if (references[candidate].Any(selected.Contains)) added |= selected.Add(candidate); } while (added);
+        selected.Remove(Path.GetFullPath(project)); return selected.Order(StringComparer.Ordinal).ToArray();
     }
     public static async Task<List<object>> Health(string root, HealthSettings policy)
     {
@@ -661,6 +760,127 @@ public static class Projects
     }
 }
 public record Affected(string[] Projects, string Reason);
+
+public static class DotnetFacts
+{
+    public static async Task<object> Inspect(string root, string? explicitProject)
+    {
+        root = Path.GetFullPath(root);
+        var projects = explicitProject is null ? Projects.Discover(root) : IsSolution(explicitProject) ? await Projects.InSolution(root, explicitProject) : ResolveTargets(root, explicitProject);
+        var sdkVersion = await Processes.Run("dotnet", ["--version"], root);
+        var sdks = await Processes.Run("dotnet", ["--list-sdks"], root);
+        var runtimes = await Processes.Run("dotnet", ["--list-runtimes"], root);
+        var rows = new List<object>(); var edges = new List<object>();
+        foreach (var project in projects)
+        {
+            var evaluation = await Projects.Evaluate(root, project); var properties = evaluation["Properties"]!; var items = evaluation["Items"];
+            var targetFrameworks = Frameworks(properties).ToArray();
+            var references = items?["ProjectReference"]?.AsArray().Select(item => item?["FullPath"]?.GetValue<string>()).OfType<string>().Select(path => Rel(root, path)).Order(StringComparer.Ordinal).ToArray() ?? [];
+            var packages = items?["PackageReference"]?.AsArray().Select(item => new { id = item?["Identity"]?.GetValue<string>(), version = ItemValue(item, "Version") }).OrderBy(item => item.id, StringComparer.Ordinal).ToArray() ?? [];
+            var platform = TestPlatform(properties, packages.Select(package => package.id).OfType<string>());
+            rows.Add(new { path = Rel(root, project), language = Path.GetExtension(project) switch { ".fsproj" => "F#", ".vbproj" => "Visual Basic", _ => "C#" }, targetFrameworks, isTest = IsTrue(properties["IsTestProject"]), testPlatform = platform, projectReferences = references, packageReferences = packages });
+            edges.AddRange(references.Select(reference => new { from = Rel(root, project), to = reference }));
+        }
+        JsonNode? globalJson = null; var globalJsonPath = Path.Combine(root, "global.json"); if (File.Exists(globalJsonPath)) globalJson = JsonNode.Parse(File.ReadAllText(globalJsonPath));
+        return new
+        {
+            schemaVersion = 1,
+            kind = "dotnet-inspection",
+            environment = new { sdk = sdkVersion.ExitCode == 0 ? sdkVersion.Output.Trim() : null, installedSdks = Lines(sdks), installedRuntimes = Lines(runtimes), processArchitecture = RuntimeInformation.ProcessArchitecture.ToString(), osArchitecture = RuntimeInformation.OSArchitecture.ToString(), runtime = RuntimeInformation.FrameworkDescription, globalJson },
+            projects = rows,
+            graph = new { nodes = projects.Select(project => Rel(root, project)), edges }
+        };
+    }
+
+    public static async Task<object> BuildPlan(string root, string? explicitProject, string? baseRef, string configuration, bool binlog)
+    {
+        ValidateConfiguration(configuration); root = Path.GetFullPath(root);
+        var affected = explicitProject is null ? await Projects.Affected(root, await Git.Changed(root, baseRef)) : null;
+        var targets = explicitProject is null ? affected!.Projects : ResolveTargets(root, explicitProject);
+        var commands = new List<object>();
+        foreach (var target in targets)
+        {
+            var relative = Rel(root, target); commands.Add(Command("restore", relative));
+            var args = new List<string> { "build", relative, "--configuration", configuration, "--no-restore", "--nologo" };
+            if (binlog) args.Add($"-bl:.agent-tool/binlogs/{SafeArtifactName(relative)}.binlog");
+            commands.Add(Command(args));
+        }
+        return new { schemaVersion = 1, kind = "dotnet-build-plan", configuration, baseRef, targets = targets.Select(target => Rel(root, target)), selection = explicitProject is null ? affected!.Reason : "Explicit project or solution.", commands, artifacts = binlog ? new { binlogs = ".agent-tool/binlogs/*.binlog", retention = "Large binary artifacts stay outside model context; summarize separately." } : null };
+    }
+
+    public static async Task<object> TestPlan(string root, string? explicitProject, string? baseRef, string configuration, string? filter)
+    {
+        ValidateConfiguration(configuration); root = Path.GetFullPath(root); if (filter is { Length: > 4096 }) throw new ArgumentException("Test filter exceeds 4096 characters.");
+        string[] tests; string selection;
+        if (explicitProject is null)
+        {
+            var affected = await Projects.Affected(root, await Git.Changed(root, baseRef));
+            var selected = new List<string>(); foreach (var project in affected.Projects) if (await Projects.IsTest(root, project)) selected.Add(project);
+            tests = selected.Order(StringComparer.Ordinal).ToArray(); selection = affected.Reason;
+        }
+        else
+        {
+            var target = Path.GetFullPath(explicitProject, root); if (!File.Exists(target)) throw new ArgumentException("Project or solution does not exist.");
+            if (IsSolution(target))
+            {
+                var selected = new List<string>(); foreach (var project in await Projects.InSolution(root, target)) if (await Projects.IsTest(root, project)) selected.Add(project); tests = selected.ToArray();
+            }
+            else if (await Projects.IsTest(root, target)) tests = [target];
+            else tests = await Projects.DependentTests(root, target);
+            selection = "Explicit target and its transitive dependent test projects.";
+        }
+        var rows = new List<object>();
+        foreach (var test in tests)
+        {
+            var evaluation = await Projects.Evaluate(root, test); var packages = evaluation["Items"]?["PackageReference"]?.AsArray().Select(item => item?["Identity"]?.GetValue<string>()).OfType<string>() ?? [];
+            var args = new List<string> { "test", Rel(root, test), "--configuration", configuration, "--nologo", "--logger", "trx", "--results-directory", ".agent-tool/test-results" }; if (filter is not null) { args.Add("--filter"); args.Add(filter); }
+            rows.Add(new { project = Rel(root, test), platform = TestPlatform(evaluation["Properties"]!, packages), targetFrameworks = Frameworks(evaluation["Properties"]!).ToArray(), command = Command(args) });
+        }
+        return new { schemaVersion = 1, kind = "dotnet-test-plan", configuration, filter, selection, tests = rows, artifacts = new { results = ".agent-tool/test-results/*.trx", coverage = ".agent-tool/test-results/**/coverage.*.xml" } };
+    }
+
+    public static object DiagnosticsPlan(string? processId)
+    {
+        int? pid = null;
+        if (processId is not null)
+        {
+            if (!int.TryParse(processId, NumberStyles.None, CultureInfo.InvariantCulture, out var parsed) || parsed <= 0) throw new ArgumentException("--process-id must be a positive integer.");
+            pid = parsed;
+        }
+        var tools = new[] { "dotnet-counters", "dotnet-trace", "dotnet-dump", "dotnet-gcdump", "dotnet-monitor" }.Select(name => new { name, available = Processes.OnPath(name) }).ToArray();
+        var plans = pid is null ? Array.Empty<object>() :
+        [
+            ToolCommand("dotnet-counters", "monitor", "--process-id", pid.Value.ToString(CultureInfo.InvariantCulture)),
+            ToolCommand("dotnet-trace", "collect", "--process-id", pid.Value.ToString(CultureInfo.InvariantCulture), "--output", ".agent-tool/traces/process.nettrace"),
+            ToolCommand("dotnet-gcdump", "collect", "--process-id", pid.Value.ToString(CultureInfo.InvariantCulture), "--output", ".agent-tool/traces/process.gcdump"),
+            ToolCommand("dotnet-dump", "collect", "--process-id", pid.Value.ToString(CultureInfo.InvariantCulture), "--output", ".agent-tool/traces/process.dmp")
+        ];
+        return new { schemaVersion = 1, kind = "dotnet-diagnostics-plan", processId = pid, tools, plans, safety = "Collection can expose secrets and personal data. Keep artifacts local, inspect size and sensitivity, and pass only bounded summaries to models." };
+    }
+
+    static string[] ResolveTargets(string root, string path)
+    {
+        var full = Path.GetFullPath(path, root); if (!File.Exists(full)) throw new ArgumentException("Project or solution does not exist."); return [full];
+    }
+    static bool IsSolution(string path) => path.EndsWith(".sln", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".slnx", StringComparison.OrdinalIgnoreCase);
+    static object Command(params string[] args) => Command((IEnumerable<string>)args);
+    static object Command(IEnumerable<string> args) => new { executable = "dotnet", arguments = args.ToArray() };
+    static object ToolCommand(string executable, params string[] args) => new { executable, arguments = args };
+    static string Rel(string root, string path) => Path.GetRelativePath(root, Path.GetFullPath(path)).Replace('\\', '/');
+    static string SafeArtifactName(string path) => Regex.Replace(path.Replace('\\', '-').Replace('/', '-'), "[^A-Za-z0-9_.-]", "-");
+    static void ValidateConfiguration(string configuration) { if (!Regex.IsMatch(configuration, "^[A-Za-z0-9_.-]{1,64}$", RegexOptions.CultureInvariant)) throw new ArgumentException("Configuration must contain only letters, numbers, dot, underscore, or hyphen."); }
+    static bool IsTrue(JsonNode? value) => string.Equals(value?.GetValue<string>(), "true", StringComparison.OrdinalIgnoreCase);
+    static IEnumerable<string> Frameworks(JsonNode properties) => (properties["TargetFrameworks"]?.GetValue<string>() is { Length: > 0 } frameworks ? frameworks : properties["TargetFramework"]?.GetValue<string>() ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    static string[] Lines(ProcessResult result) => result.ExitCode == 0 ? result.Output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) : [];
+    static string? ItemValue(JsonNode? item, string name) => item?[name]?.GetValue<string>() ?? item?["Metadata"]?[name]?.GetValue<string>();
+    static string TestPlatform(JsonNode properties, IEnumerable<string> packages)
+    {
+        var names = packages.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (IsTrue(properties["IsTestingPlatformApplication"]) || IsTrue(properties["UseMicrosoftTestingPlatformRunner"]) || names.Contains("Microsoft.Testing.Platform") || names.Contains("MSTest.Sdk")) return "microsoft-testing-platform";
+        if (names.Contains("Microsoft.NET.Test.Sdk")) return "vstest";
+        return IsTrue(properties["IsTestProject"]) ? "unknown" : "not-test-project";
+    }
+}
 
 public static class SafeFiles
 {
@@ -727,6 +947,100 @@ public static class Output
                     if (rows.Count < limits.MaxItems) rows.Add(new { rule = result.TryGetProperty("ruleId", out var rule) ? rule.GetString() : null, level = result.TryGetProperty("level", out var level) ? level.GetString() : "warning", message = Compact(result.GetProperty("message").TryGetProperty("text", out var text) ? text.GetString() ?? "" : result.GetProperty("message").ToString(), limits), locations = result.TryGetProperty("locations", out var locations) ? locations.EnumerateArray().Take(1).Select(x => x.Clone()).ToArray() : [] });
                 }
         return new { count, results = rows, truncated = count > rows.Count, artifact = Path.GetFullPath(path) };
+    }
+}
+
+public static class DotnetArtifacts
+{
+    public static object Dependencies(string path, string root, OutputSettings limits)
+    {
+        using var document = JsonDocument.Parse(File.ReadAllText(path)); var rows = new List<object>(); int direct = 0, transitive = 0;
+        if (!document.RootElement.TryGetProperty("projects", out var projects) || projects.ValueKind != JsonValueKind.Array) throw new FormatException("NuGet package-list JSON has no projects array.");
+        foreach (var project in projects.EnumerateArray())
+        {
+            var projectPath = project.TryGetProperty("path", out var projectValue) ? Relative(root, projectValue.GetString()) : null;
+            if (!project.TryGetProperty("frameworks", out var frameworks)) continue;
+            foreach (var framework in frameworks.EnumerateArray())
+            {
+                var tfm = framework.TryGetProperty("framework", out var frameworkValue) ? frameworkValue.GetString() : null;
+                Add("topLevelPackages", true); Add("transitivePackages", false);
+                void Add(string property, bool topLevel)
+                {
+                    if (!framework.TryGetProperty(property, out var packages)) return;
+                    foreach (var package in packages.EnumerateArray())
+                    {
+                        if (topLevel) direct++; else transitive++;
+                        if (rows.Count < limits.MaxItems) rows.Add(new { project = projectPath, framework = tfm, id = package.TryGetProperty("id", out var id) ? id.GetString() : null, direct = topLevel, requestedVersion = package.TryGetProperty("requestedVersion", out var requested) ? requested.GetString() : null, resolvedVersion = package.TryGetProperty("resolvedVersion", out var resolved) ? resolved.GetString() : null });
+                    }
+                }
+            }
+        }
+        return new { schemaVersion = 1, kind = "dependency-inventory", direct, transitive, total = direct + transitive, packages = rows, truncated = direct + transitive > rows.Count, artifact = Path.GetFullPath(path) };
+    }
+    public static object TestResults(string path, OutputSettings limits)
+    {
+        var document = XDocument.Load(path, LoadOptions.None); var root = document.Root ?? throw new FormatException("Test results XML has no root element.");
+        if (root.Name.LocalName == "TestRun") return Trx(path, root, limits);
+        if (root.Name.LocalName is "testsuite" or "testsuites") return JUnit(path, root, limits);
+        throw new FormatException("Unsupported test result XML. Expected TRX, JUnit testsuite, or JUnit testsuites.");
+    }
+    static object Trx(string path, XElement root, OutputSettings limits)
+    {
+        var results = root.Descendants().Where(element => element.Name.LocalName == "UnitTestResult").ToArray();
+        var outcomes = results.GroupBy(result => (string?)result.Attribute("outcome") ?? "Unknown", StringComparer.OrdinalIgnoreCase).OrderBy(group => group.Key, StringComparer.OrdinalIgnoreCase).ToDictionary(group => group.Key, group => group.Count(), StringComparer.OrdinalIgnoreCase);
+        var failures = results.Where(result => !string.Equals((string?)result.Attribute("outcome"), "Passed", StringComparison.OrdinalIgnoreCase)).Take(limits.MaxItems).Select(result => new
+        {
+            test = (string?)result.Attribute("testName"),
+            outcome = (string?)result.Attribute("outcome"),
+            duration = (string?)result.Attribute("duration"),
+            message = Output.Compact(result.Descendants().FirstOrDefault(element => element.Name.LocalName == "Message")?.Value ?? "", limits)
+        }).ToArray();
+        var duration = results.Select(result => TimeSpan.TryParse((string?)result.Attribute("duration"), CultureInfo.InvariantCulture, out var value) ? value : TimeSpan.Zero).Aggregate(TimeSpan.Zero, (total, value) => total + value);
+        return new { schemaVersion = 1, kind = "test-results", format = "trx", total = results.Length, outcomes, durationMilliseconds = duration.TotalMilliseconds, failures, truncated = results.Count(result => !string.Equals((string?)result.Attribute("outcome"), "Passed", StringComparison.OrdinalIgnoreCase)) > failures.Length, artifact = Path.GetFullPath(path) };
+    }
+    static object JUnit(string path, XElement root, OutputSettings limits)
+    {
+        var cases = root.DescendantsAndSelf().Where(element => element.Name.LocalName == "testcase").ToArray();
+        string Outcome(XElement test) => test.Elements().Any(element => element.Name.LocalName is "failure" or "error") ? "Failed" : test.Elements().Any(element => element.Name.LocalName == "skipped") ? "Skipped" : "Passed";
+        var outcomes = cases.GroupBy(Outcome, StringComparer.Ordinal).OrderBy(group => group.Key, StringComparer.Ordinal).ToDictionary(group => group.Key, group => group.Count(), StringComparer.Ordinal);
+        var failures = cases.Where(test => Outcome(test) == "Failed").Take(limits.MaxItems).Select(test => new { test = (string?)test.Attribute("name"), className = (string?)test.Attribute("classname"), outcome = "Failed", message = Output.Compact(test.Elements().First(element => element.Name.LocalName is "failure" or "error").Value, limits) }).ToArray();
+        var seconds = cases.Sum(test => double.TryParse((string?)test.Attribute("time"), NumberStyles.Float, CultureInfo.InvariantCulture, out var value) ? value : 0);
+        return new { schemaVersion = 1, kind = "test-results", format = "junit", total = cases.Length, outcomes, durationMilliseconds = seconds * 1000, failures, truncated = outcomes.GetValueOrDefault("Failed") > failures.Length, artifact = Path.GetFullPath(path) };
+    }
+    public static object Coverage(string path, OutputSettings limits)
+    {
+        var document = XDocument.Load(path, LoadOptions.None); var root = document.Root ?? throw new FormatException("Coverage XML has no root element.");
+        if (root.Name.LocalName == "coverage")
+        {
+            var linesValid = IntAttribute(root, "lines-valid"); var linesCovered = IntAttribute(root, "lines-covered"); var branchesValid = IntAttribute(root, "branches-valid"); var branchesCovered = IntAttribute(root, "branches-covered");
+            var files = root.Descendants().Where(element => element.Name.LocalName == "class").Select(element => new { path = (string?)element.Attribute("filename"), lineRate = DoubleAttribute(element, "line-rate"), branchRate = DoubleAttribute(element, "branch-rate") }).OrderBy(item => item.path, StringComparer.Ordinal).Take(limits.MaxItems).ToArray();
+            return CoverageResult(path, "cobertura", linesValid, linesCovered, branchesValid, branchesCovered, files);
+        }
+        if (root.Name.LocalName == "CoverageSession")
+        {
+            var summary = root.Descendants().FirstOrDefault(element => element.Name.LocalName == "Summary") ?? throw new FormatException("OpenCover summary is missing.");
+            var sequence = IntAttribute(summary, "numSequencePoints"); var visitedSequence = IntAttribute(summary, "visitedSequencePoints"); var branches = IntAttribute(summary, "numBranchPoints"); var visitedBranches = IntAttribute(summary, "visitedBranchPoints");
+            var files = root.Descendants().Where(element => element.Name.LocalName == "File").Select(element => new { id = (string?)element.Attribute("uid"), path = (string?)element.Attribute("fullPath") }).Take(limits.MaxItems).ToArray();
+            return CoverageResult(path, "opencover", sequence, visitedSequence, branches, visitedBranches, files);
+        }
+        throw new FormatException("Unsupported coverage XML. Expected Cobertura or OpenCover.");
+    }
+    static object CoverageResult(string path, string format, int linesValid, int linesCovered, int branchesValid, int branchesCovered, object files) => new
+    {
+        schemaVersion = 1,
+        kind = "coverage-summary",
+        format,
+        lines = new { valid = linesValid, covered = linesCovered, percent = Percent(linesCovered, linesValid) },
+        branches = new { valid = branchesValid, covered = branchesCovered, percent = Percent(branchesCovered, branchesValid) },
+        files,
+        artifact = Path.GetFullPath(path)
+    };
+    static int IntAttribute(XElement element, string name) => int.TryParse((string?)element.Attribute(name), NumberStyles.Integer, CultureInfo.InvariantCulture, out var value) ? value : 0;
+    static double? DoubleAttribute(XElement element, string name) => double.TryParse((string?)element.Attribute(name), NumberStyles.Float, CultureInfo.InvariantCulture, out var value) ? value : null;
+    static double? Percent(int covered, int valid) => valid == 0 ? null : Math.Round(covered * 100d / valid, 2, MidpointRounding.AwayFromZero);
+    static string? Relative(string root, string? path)
+    {
+        if (path is null) return null; var full = Path.GetFullPath(path, root); var relative = Path.GetRelativePath(Path.GetFullPath(root), full).Replace('\\', '/'); return relative == ".." || relative.StartsWith("../", StringComparison.Ordinal) ? full : relative;
     }
 }
 public static class Audit

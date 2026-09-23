@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<CoverageSession>
+  <Summary numSequencePoints="20" visitedSequencePoints="15" numBranchPoints="8" visitedBranchPoints="6" />
+  <Modules><Module><Files><File uid="1" fullPath="src/A.cs" /></Files></Module></Modules>
+</CoverageSession>

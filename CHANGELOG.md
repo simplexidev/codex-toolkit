@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Adds versioned AgentTool contracts for bounded repository/change summaries, file
+  ownership and impact, .NET environment/project inspection, resolved dependencies,
+  and non-executing build, test, binlog, and diagnostics plans.
+- Normalizes TRX/JUnit test results and Cobertura/OpenCover coverage into compact JSON.
+
 ## 1.0.0
 
 First stable release of the Codex toolkit.

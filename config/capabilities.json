@@ -9,12 +9,14 @@
     {
       "id": "repo-navigation-impact",
       "title": "Repository navigation and impact",
-      "tasks": ["locate files", "list changed files", "map affected .NET projects"],
+      "tasks": ["locate files", "summarize changes", "map file ownership and affected .NET projects"],
       "coverage": "supported",
       "existingSupport": [
         { "kind": "agent-tool", "id": "repo locate", "scope": "Bounded tracked and unignored path-name search." },
         { "kind": "agent-tool", "id": "repo changed-files", "scope": "Merge-base-aware changed-file inventory." },
-        { "kind": "agent-tool", "id": "repo affected-projects", "scope": "Maps changes to .NET project and test dependencies." }
+        { "kind": "agent-tool", "id": "repo summary", "scope": "Bounded change classifications plus local branch and upstream divergence facts." },
+        { "kind": "agent-tool", "id": "repo affected-projects", "scope": "Maps changes to .NET project and test dependencies." },
+        { "kind": "agent-tool", "id": "repo ownership", "scope": "Maps a file to evaluated Compile ownership and transitive project impact." }
       ],
       "opportunities": { "deterministic": "Keep path and project graph discovery in AgentTool; use rg for symbols.", "jev": "No fit for exact path or graph facts.", "agent": "Interpret impact after deterministic narrowing." },
       "routing": { "primary": "deterministic", "fallback": ["agent"], "reason": "Paths and project references are exact repository facts." },
@@ -30,6 +32,7 @@
       "coverage": "supported",
       "existingSupport": [
         { "kind": "agent-tool", "id": "git state", "scope": "Structured branch, status and operation state." },
+        { "kind": "agent-tool", "id": "git summary", "scope": "Adds bounded changes and upstream ahead/behind counts without mutation." },
         { "kind": "agent-tool", "id": "git prepare-commit", "scope": "Safety and whitespace checks without committing." },
         { "kind": "skill", "id": "prepare-commit", "scope": "Explicit staging and unrelated-work preservation guidance." }
       ],
@@ -181,6 +184,8 @@
       "coverage": "supported",
       "existingSupport": [
         { "kind": "agent-tool", "id": "dotnet verify", "scope": "Restores, builds and tests affected .NET targets." },
+        { "kind": "agent-tool", "id": "dotnet inspect", "scope": "Normalizes SDK, TFM, package, test-platform and project-reference facts." },
+        { "kind": "agent-tool", "id": "dotnet build-plan", "scope": "Constructs affected restore/build/binlog commands without executing them." },
         { "kind": "agent-tool", "id": "dotnet format", "scope": "Checks or applies formatting to changed C# files." },
         { "kind": "skill", "id": "dotnet-verify", "scope": "Selects targeted validation." },
         { "kind": "upstream", "id": "dotnet-advanced", "scope": "Optional advanced C# workflows." }
@@ -199,15 +204,18 @@
       "coverage": "supported",
       "existingSupport": [
         { "kind": "agent-tool", "id": "dotnet verify", "scope": "Runs detected affected test projects." },
+        { "kind": "agent-tool", "id": "dotnet test-plan", "scope": "Detects platforms and constructs filtered affected-test commands." },
+        { "kind": "agent-tool", "id": "test-results summarize", "scope": "Normalizes bounded TRX and JUnit outcomes." },
+        { "kind": "agent-tool", "id": "coverage summarize", "scope": "Normalizes exact Cobertura and OpenCover counters." },
         { "kind": "skill", "id": "test-quality", "scope": "Assesses assertions, coverage and optional mutation testing." },
         { "kind": "upstream", "id": "dotnet-test", "scope": "Optional test-platform-specific workflows." }
       ],
       "opportunities": { "deterministic": "Detect platforms and preserve structured test results.", "jev": "No fit for pass/fail or coverage facts.", "agent": "Judge missing behavioral cases and causal failures." },
       "routing": { "primary": "deterministic", "fallback": ["agent"], "reason": "Test runners produce facts; adequacy needs code reasoning." },
       "staticCost": { "level": "low", "activation": "implicit", "loads": ["dotnet-verify", "test-quality"], "concern": "Do not load test-quality for every routine test run." },
-      "gaps": ["No unified TRX parser or built-in coverage format normalizer."],
+      "gaps": ["Coverage planning and mutation-test formats remain project-specific."],
       "duplication": ["dotnet-verify executes tests; test-quality evaluates their design."],
-      "recommendedAction": "Add structured result parsing only if metrics require cross-run normalization."
+      "recommendedAction": "Keep result and coverage facts in versioned AgentTool contracts; reserve behavioral adequacy for the agent."
     },
     {
       "id": "msbuild",
@@ -216,6 +224,7 @@
       "coverage": "partial",
       "existingSupport": [
         { "kind": "agent-tool", "id": "repo health", "scope": "Evaluates selected MSBuild properties against policy." },
+        { "kind": "agent-tool", "id": "dotnet build-plan", "scope": "Emits explicit restore/build steps and optional bounded binlog artifact paths." },
         { "kind": "agent-tool", "id": "logs summarize", "scope": "Compacts text build output." },
         { "kind": "upstream", "id": "dotnet-msbuild", "scope": "Recommended upstream build-analysis skills." },
         { "kind": "upstream", "id": "Microsoft.AITools.BinlogMcp", "scope": "On-demand structured binlog inspection reference." }
@@ -236,12 +245,13 @@
         { "kind": "skill", "id": "diagnostics", "scope": "Selects bounded .NET diagnostics and protects dump sensitivity." },
         { "kind": "skill", "id": "performance-investigation", "scope": "Evidence-led regression diagnosis." },
         { "kind": "upstream", "id": "dotnet-diag", "scope": "Optional diagnostic collection workflows." },
-        { "kind": "agent-tool", "id": "results context", "scope": "Selects a caller-designated durable artifact without history scans." }
+        { "kind": "agent-tool", "id": "results context", "scope": "Selects a caller-designated durable artifact without history scans." },
+        { "kind": "agent-tool", "id": "dotnet diagnostics-plan", "scope": "Detects installed diagnostics tools and emits PID-scoped collection command arguments." }
       ],
       "opportunities": { "deterministic": "Parse counters and trace summaries when stable local formats are available.", "jev": "No fit for sensitive raw artifacts or exact measurements.", "agent": "Form and test causal hypotheses from bounded evidence." },
       "routing": { "primary": "deterministic", "fallback": ["agent", "stronger-agent"], "reason": "Measurements lead; difficult causal diagnosis may justify stronger reasoning." },
       "staticCost": { "level": "medium", "activation": "implicit", "loads": ["diagnostics", "performance-investigation"], "concern": "Choose collection or investigation, not both by default." },
-      "gaps": ["AgentTool does not collect or parse diagnostics directly."],
+      "gaps": ["AgentTool plans but intentionally does not initiate sensitive diagnostics collection or parse binary traces and dumps."],
       "duplication": ["Diagnostics chooses evidence; performance-investigation follows evidence to cause."],
       "recommendedAction": "Keep collection on demand and add parsers only for safe, bounded summaries."
     },
@@ -251,6 +261,7 @@
       "tasks": ["change package versions", "inspect transitive deltas", "verify restores"],
       "coverage": "supported",
       "existingSupport": [
+        { "kind": "agent-tool", "id": "dotnet dependencies", "scope": "Normalizes resolved direct and transitive packages by project and TFM." },
         { "kind": "skill", "id": "dependency-change", "scope": "Coordinates central versions, restore, audit and tests." },
         { "kind": "agent-tool", "id": "dotnet package-audit", "scope": "Reports vulnerable resolved packages." },
         { "kind": "workflow", "id": "dependabot.yml", "scope": "Weekly NuGet and Actions update proposals." }
@@ -258,7 +269,7 @@
       "opportunities": { "deterministic": "Use restore graphs and package metadata for exact deltas.", "jev": "No fit for versions or advisory facts.", "agent": "Assess compatibility and update code/tests." },
       "routing": { "primary": "deterministic", "fallback": ["agent"], "reason": "Resolved graphs and advisories must be tool-derived." },
       "staticCost": { "level": "low", "activation": "implicit", "loads": ["dependency-change"], "concern": "Activate only when package references or central versions change." },
-      "gaps": ["No general before/after dependency graph diff."],
+      "gaps": ["No before/after resolved dependency graph diff."],
       "duplication": ["package-audit is a focused security subset of dependency-change."],
       "recommendedAction": "Add graph-delta output to the existing command family if dependency reviews need it."
     },

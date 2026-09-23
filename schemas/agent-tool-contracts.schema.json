@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AgentTool structured output contracts",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "manifestVersion", "contracts"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "manifestVersion": { "const": 1 },
+    "contracts": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["command", "kind", "schemaVersion", "mode"],
+        "properties": {
+          "command": { "type": "string", "minLength": 1 },
+          "kind": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+          "schemaVersion": { "type": "integer", "minimum": 1 },
+          "mode": { "enum": ["facts", "plan", "summary"] }
+        }
+      }
+    }
+  }
+}
