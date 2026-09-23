@@ -1,0 +1,131 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "manifestVersion", "snapshot", "policy", "summary", "plugins", "decisions", "licenseStrategy"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "manifestVersion": { "const": 2 },
+    "snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "url", "branch", "commit", "commitDate", "inspectedAt", "license"],
+      "properties": {
+        "repository": { "const": "dotnet/skills" },
+        "url": { "type": "string", "format": "uri" },
+        "branch": { "type": "string", "minLength": 1 },
+        "commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "commitDate": { "type": "string", "format": "date-time" },
+        "inspectedAt": { "type": "string", "format": "date" },
+        "license": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["spdx", "path", "copyright"],
+          "properties": {
+            "spdx": { "const": "MIT" },
+            "path": { "const": "LICENSE" },
+            "copyright": { "type": "string", "minLength": 1 }
+          }
+        }
+      }
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["integration", "context", "vendor", "install"],
+      "properties": {
+        "integration": { "type": "string", "minLength": 1 },
+        "context": { "type": "string", "minLength": 1 },
+        "vendor": { "type": "string", "minLength": 1 },
+        "install": { "type": "string", "minLength": 1 }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["plugins", "skills", "skillBytes", "skillWords", "supportingFiles", "supportingBytes"],
+      "properties": {
+        "plugins": { "type": "integer", "minimum": 1 },
+        "skills": { "type": "integer", "minimum": 1 },
+        "skillBytes": { "type": "integer", "minimum": 1 },
+        "skillWords": { "type": "integer", "minimum": 1 },
+        "supportingFiles": { "type": "integer", "minimum": 0 },
+        "supportingBytes": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "plugins": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/plugin" }
+    },
+    "decisions": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/decision" }
+    },
+    "licenseStrategy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["current", "ifVendored", "releaseCheck"],
+      "properties": {
+        "current": { "type": "string", "minLength": 1 },
+        "ifVendored": { "type": "string", "minLength": 1 },
+        "releaseCheck": { "type": "string", "minLength": 1 }
+      }
+    }
+  },
+  "$defs": {
+    "plugin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version", "path", "codexPluginPath", "license", "skillCount", "skillBytes", "skillWords", "supportingFileCount", "supportingBytes", "skills", "mcpServers", "defaultDisposition"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "version": { "type": "string", "minLength": 1 },
+        "path": { "type": "string", "pattern": "^plugins/" },
+        "codexPluginPath": { "type": "string", "pattern": "^plugins/.+/\\.codex-plugin/plugin\\.json$" },
+        "license": { "const": "MIT" },
+        "skillCount": { "type": "integer", "minimum": 1 },
+        "skillBytes": { "type": "integer", "minimum": 1 },
+        "skillWords": { "type": "integer", "minimum": 1 },
+        "supportingFileCount": { "type": "integer", "minimum": 0 },
+        "supportingBytes": { "type": "integer", "minimum": 0 },
+        "skills": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+        "mcpServers": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+        "defaultDisposition": { "$ref": "#/$defs/classification" }
+      }
+    },
+    "classification": {
+      "enum": ["KEEP_UPSTREAM", "VENDOR_UNCHANGED", "VENDOR_OPTIMIZE", "REPLACE_WITH_AGENTTOOL", "CONVERT_TO_REFERENCE", "DO_NOT_INSTALL"]
+    },
+    "decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "capabilities", "plugin", "upstreamPaths", "classification", "trigger", "referenceLoading", "staticCost", "toolsAndMcps", "currentToolkitUse", "deterministicParts", "jevSuitableParts", "gptExpertValue", "rationale"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "capabilities": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+        "plugin": { "type": "string", "minLength": 1 },
+        "upstreamPaths": { "type": "array", "minItems": 1, "items": { "type": "string", "pattern": "^plugins/.+/skills/.+/SKILL\\.md$" }, "uniqueItems": true },
+        "classification": { "$ref": "#/$defs/classification" },
+        "trigger": { "type": "string", "minLength": 1 },
+        "referenceLoading": { "type": "string", "minLength": 1 },
+        "staticCost": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["level", "scope"],
+          "properties": {
+            "level": { "enum": ["low", "medium", "high", "very-high"] },
+            "scope": { "type": "string", "minLength": 1 }
+          }
+        },
+        "toolsAndMcps": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+        "currentToolkitUse": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+        "deterministicParts": { "type": "string", "minLength": 1 },
+        "jevSuitableParts": { "type": "string", "minLength": 1 },
+        "gptExpertValue": { "type": "string", "minLength": 1 },
+        "rationale": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

@@ -19,6 +19,10 @@ difficult analysis. JEV is suitable only for sanitized ambiguous candidate sets;
 it is not a substitute for Git state, compiler/analyzer output, advisories,
 measurements, package identity, licenses, security findings, or authorization.
 
+Official .NET skill routing and pinned source provenance are recorded separately
+in [dotnet-skills-provenance.md](dotnet-skills-provenance.md). That inventory is
+complete at its pinned SHA but remains lazy routing metadata, not default context.
+
 ## Portfolio findings
 
 | Area | Finding | Engineering direction |
