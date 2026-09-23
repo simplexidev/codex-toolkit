@@ -1,0 +1,6 @@
+interface:
+  display_name: "CI Triage"
+  short_description: "Diagnose failed GitHub Actions runs"
+  default_prompt: "Use $ci-triage."
+policy:
+  allow_implicit_invocation: true

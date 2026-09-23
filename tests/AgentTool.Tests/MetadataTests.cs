@@ -232,6 +232,18 @@ public class MetadataTests
     }
 
     [Fact]
+    public void GeneralRepositoryCapabilitiesUseOneNarrowNewSkill()
+    {
+        var skills = Directory.GetDirectories(Path.Combine(Root, "plugins/codex-toolkit/skills")).Select(Path.GetFileName).ToArray();
+        Assert.Contains("ci-triage", skills);
+        Assert.DoesNotContain("artifact-inspection", skills); Assert.DoesNotContain("sarif-diff", skills); Assert.DoesNotContain("merge-conflicts", skills); Assert.DoesNotContain("repository-cleanup", skills);
+        Assert.InRange(new FileInfo(Path.Combine(Root, "plugins/codex-toolkit/skills/ci-triage/SKILL.md")).Length, 1, 2_500);
+        var manifest = JsonNode.Parse(File.ReadAllText(Path.Combine(Root, "config/capabilities.json")))!;
+        Assert.Equal(1, manifest["summary"]!["gap"]!.GetValue<int>());
+        Assert.Equal("licenses", manifest["capabilities"]!.AsArray().Single(x => x!["coverage"]!.GetValue<string>() == "gap")!["id"]!.GetValue<string>());
+    }
+
+    [Fact]
     public void LiveJevWorkflowIsManuallyOrLowFrequencyTriggeredAndSecretIsStepScoped()
     {
         var workflow = File.ReadAllText(Path.Combine(Root, ".github/workflows/jev-integration.yml"));

@@ -28,10 +28,11 @@ public static class AgentTool
         install | update [--home DIR] [--codex-home DIR] [--dry-run] [--bin]
         uninstall [--home DIR] [--codex-home DIR] [--dry-run]
         doctor
-        repo changed-files [--base REF] | summary [--base REF] | locate --query TEXT | health
+        repo changed-files [--base REF] | summary [--base REF] | locate --query TEXT | health | hygiene
         repo affected-projects [--base REF] | ownership --file PATH
-        git state | summary [--base REF] | prepare-commit | issue-start --issue NUMBER --branch NAME
+        git state | summary [--base REF] | conflict-forecast --base REF | prepare-commit | issue-start --issue NUMBER --branch NAME
         github pr-status | review-comments --pr NUMBER | prepare-pr
+        github actions [--run-id NUMBER] [--failed-logs]
         dotnet inspect [--project PATH] | build-plan [--base REF] [--project PATH] [--configuration NAME] [--binlog]
         dotnet test-plan [--base REF] [--project PATH] [--configuration NAME]
             [--test NAME | --class NAME | --category NAME | --filter EXPR]
@@ -39,7 +40,8 @@ public static class AgentTool
             [--duration-seconds NUMBER]
         dotnet verify [--base REF] [--project PATH] | format --project PATH [--apply]
         dotnet dependencies --project PATH | package-audit --project PATH | api-check --project PATH | release-verify --project PATH
-        logs summarize --file PATH | sarif summarize --file PATH
+        logs summarize --file PATH | sarif summarize --file PATH [--baseline PATH]
+        artifact inspect --file PATH | verify --file PATH --sha256 HEX
         test-results summarize --file PATH | coverage summarize --file PATH
         jev noul|choice|score --input PATH [--dry-run] [--safe-input]
         jev screen --input PATH [--dry-run] [--safe-input] | cache-clear
@@ -70,7 +72,7 @@ public static class AgentTool
             Console.WriteLine(Render(result, root, settings.Output));
             return result.ExitCode;
         }
-        catch (Exception e) when (e is ArgumentException or IOException or UnauthorizedAccessException or InvalidOperationException or PlatformNotSupportedException or JsonException or FormatException or System.Xml.XmlException or System.ComponentModel.Win32Exception)
+        catch (Exception e) when (e is ArgumentException or IOException or InvalidDataException or UnauthorizedAccessException or InvalidOperationException or PlatformNotSupportedException or JsonException or FormatException or System.Xml.XmlException or System.ComponentModel.Win32Exception)
         {
             Console.Error.WriteLine(JsonSerializer.Serialize(new { status = "error", message = Secrets.Redact(e.Message) }, Json));
             return 2;
@@ -117,6 +119,7 @@ public static class AgentTool
             case "doctor": return await Doctor(toolkit, settings, c);
             case "git state": return Result.Ok(await Git.State(root));
             case "git summary": return Result.Ok(await Repository.Summary(root, c.Get("base"), settings.Output));
+            case "git conflict-forecast": return Result.Ok(await Git.ConflictForecast(root, c.Require("base"), settings.Output));
             case "git prepare-commit":
             case "github prepare-pr":
                 await Git.EnsureSafe(root, false);
@@ -141,10 +144,12 @@ public static class AgentTool
             case "repo health":
                 var health = await Projects.Health(root, settings.Health);
                 return new(health.Count == 0 ? "ok" : "findings", health, health.Count == 0 ? 0 : 1);
+            case "repo hygiene": return Result.Ok(await Repository.Hygiene(root, settings.Output));
             case "github pr-status": return await RunArtifact("gh", ["pr", "status", "--json", "headRefName,author,reviewDecision,statusCheckRollup"], root, artifacts, settings.Output);
             case "github review-comments":
                 var pr = c.PositiveInt("pr").ToString(CultureInfo.InvariantCulture);
                 return await RunArtifact("gh", ["api", $"repos/{{owner}}/{{repo}}/pulls/{pr}/comments", "--paginate"], root, artifacts, settings.Output);
+            case "github actions": return await GitHub.Actions(root, artifacts, c.Get("run-id"), c.Flag("failed-logs"), settings.Output);
             case "dotnet verify":
             case "dotnet format":
             case "dotnet package-audit":
@@ -158,7 +163,9 @@ public static class AgentTool
             case "dotnet diagnostics-plan": return Result.Ok(await DotnetFacts.DiagnosticsPlan(c.Get("process-id"), c.Get("signal"), c.Get("duration-seconds"), root));
             case "logs summarize":
                 return Result.Ok(Output.SummarizeFile(c.Require("file"), settings.Output));
-            case "sarif summarize": return Result.Ok(Output.Sarif(c.Require("file"), settings.Output));
+            case "sarif summarize": return Result.Ok(Output.Sarif(c.Require("file"), settings.Output, c.Get("baseline")));
+            case "artifact inspect": return Result.Ok(Artifacts.Inspect(c.Require("file"), settings.Output));
+            case "artifact verify": return Artifacts.Verify(c.Require("file"), c.Require("sha256"));
             case "test-results summarize": return Result.Ok(DotnetArtifacts.TestResults(c.Require("file"), settings.Output));
             case "coverage summarize": return Result.Ok(DotnetArtifacts.Coverage(c.Require("file"), settings.Output));
             case "jev noul":
@@ -371,11 +378,12 @@ public sealed class Cli
             "install" or "update" => ["home", "codex-home", "dry-run", "bin"],
             "uninstall" => ["home", "codex-home", "dry-run"],
             "doctor" => ["home", "codex-home"],
-            "repo changed-files" or "repo affected-projects" or "repo summary" or "git summary" => ["base"],
+            "repo changed-files" or "repo affected-projects" or "repo summary" or "git summary" or "git conflict-forecast" => ["base"],
             "repo locate" => ["query"],
             "repo ownership" => ["file"],
             "git issue-start" => ["issue", "branch"],
             "github review-comments" => ["pr"],
+            "github actions" => ["run-id", "failed-logs"],
             "dotnet verify" => ["base", "project"],
             "dotnet inspect" => ["project"],
             "dotnet build-plan" => ["base", "project", "configuration", "binlog"],
@@ -383,7 +391,9 @@ public sealed class Cli
             "dotnet diagnostics-plan" => ["process-id", "signal", "duration-seconds"],
             "dotnet format" => ["base", "project", "apply"],
             "dotnet dependencies" or "dotnet package-audit" or "dotnet api-check" or "dotnet release-verify" => ["project"],
-            "logs summarize" or "sarif summarize" or "test-results summarize" or "coverage summarize" => ["file"],
+            "logs summarize" or "test-results summarize" or "coverage summarize" or "artifact inspect" => ["file"],
+            "sarif summarize" => ["file", "baseline"],
+            "artifact verify" => ["file", "sha256"],
             "jev noul" or "jev choice" or "jev score" or "jev screen" => ["input", "dry-run", "safe-input"],
             "upstream update" => ["dry-run"],
             "eval" => ["skill", "results"],
@@ -397,8 +407,8 @@ public sealed class Cli
     }
     public List<string> Words { get; } = [];
     public Dictionary<string, string?> Options { get; } = new(StringComparer.Ordinal);
-    static readonly HashSet<string> Flags = ["json", "help", "dry-run", "bin", "apply", "safe-input", "binlog"];
-    static readonly HashSet<string> Values = ["root", "toolkit", "home", "codex-home", "base", "query", "issue", "branch", "pr", "project", "file", "input", "output", "skill", "results", "configuration", "test", "class", "category", "filter", "process-id", "signal", "duration-seconds"];
+    static readonly HashSet<string> Flags = ["json", "help", "dry-run", "bin", "apply", "safe-input", "binlog", "failed-logs"];
+    static readonly HashSet<string> Values = ["root", "toolkit", "home", "codex-home", "base", "baseline", "query", "issue", "branch", "pr", "run-id", "project", "file", "sha256", "input", "output", "skill", "results", "configuration", "test", "class", "category", "filter", "process-id", "signal", "duration-seconds"];
     public string? Get(string name) => Options.GetValueOrDefault(name);
     public bool Flag(string name) => Options.ContainsKey(name);
     public string Require(string name) => Get(name) is { Length: > 0 } v ? v : throw new ArgumentException($"--{name} is required.");
@@ -507,6 +517,7 @@ public static class Git
         if (requireClean && !state.Clean) throw new InvalidOperationException("Working tree has changes; preserve them before starting an issue.");
     }
     public static async Task<string[]> Files(string root) => (await Require(root, "ls-files", "--cached", "--others", "--exclude-standard", "-z")).Split('\0', StringSplitOptions.RemoveEmptyEntries).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
+    public static async Task<string[]> Tracked(string root) => (await Require(root, "ls-files", "--cached", "-z")).Split('\0', StringSplitOptions.RemoveEmptyEntries).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
     public static async Task<string[]> Changed(string root, string? baseRef = null)
     {
         var names = new HashSet<string>(StringComparer.Ordinal);
@@ -524,6 +535,18 @@ public static class Git
         }
         await Add("ls-files", "--others", "--exclude-standard", "-z");
         return names.Order(StringComparer.Ordinal).ToArray();
+    }
+    public static async Task<object> ConflictForecast(string root, string baseRef, OutputSettings limits)
+    {
+        var target = (await Require(root, "rev-parse", "--verify", "--end-of-options", baseRef + "^{commit}")).Trim();
+        var head = (await Require(root, "rev-parse", "HEAD^{commit}")).Trim();
+        var mergeBase = (await Require(root, "merge-base", head, target)).Trim();
+        var result = await Processes.Run("git", ["merge-tree", "--write-tree", "--name-only", "--messages", head, target], root);
+        if (result.ExitCode is not (0 or 1)) throw new InvalidOperationException("Git merge-tree could not forecast conflicts: " + Secrets.Redact(string.Join(' ', Output.Compact(result.Output, limits))));
+        var lines = result.Output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var conflicts = lines.Where(line => line.StartsWith("CONFLICT ", StringComparison.Ordinal)).ToArray();
+        var paths = conflicts.Select(line => Regex.Match(line, @"(?: in |delete/modify: )(.+?)(?: deleted|$)").Groups[1].Value.Trim()).Where(path => path.Length > 0).Distinct(StringComparer.Ordinal).Take(limits.MaxItems).ToArray();
+        return new { schemaVersion = 1, kind = "git-conflict-forecast", baseRef, head, target, mergeBase, hasConflicts = result.ExitCode == 1, conflictCount = conflicts.Length, paths, pathsTruncated = conflicts.Length > paths.Length, evidence = conflicts.Take(limits.MaxItems), note = "Forecast only: refs, index and worktree were not changed. Rename and custom merge-driver behavior may differ in a real merge." };
     }
 }
 public record GitState(string Root, string? Branch, bool Clean, List<string> Operations, string[] Entries);
@@ -556,6 +579,76 @@ public static class Repository
             changes = new { baseRef, count = changed.Length, files = changed.Take(limits.MaxItems), truncated = changed.Length > limits.MaxItems, byExtension, byArea }
         };
     }
+    public static async Task<object> Hygiene(string root, OutputSettings limits)
+    {
+        var tracked = await Git.Tracked(root); var candidates = new List<object>(); int total = 0;
+        foreach (var relative in tracked)
+        {
+            var normalized = relative.Replace('\\', '/'); var file = Path.Combine(root, relative); string? reason = null;
+            if (Regex.IsMatch(normalized, @"(^|/)(tests?|specs?)/fixtures/", RegexOptions.IgnoreCase)) continue;
+            if (Regex.IsMatch(normalized, @"(^|/)(bin|obj|dist|coverage|TestResults)/", RegexOptions.IgnoreCase)) reason = "tracked-output-directory";
+            else if (Regex.IsMatch(normalized, @"(^|/)(\.DS_Store|Thumbs\.db)$|\.(tmp|bak|orig|rej|log)$", RegexOptions.IgnoreCase)) reason = "temporary-or-tool-artifact";
+            else if (File.Exists(file) && new FileInfo(file).Length <= 1_000_000)
+            {
+                using var reader = new StreamReader(file); var prefix = new char[2048]; var read = reader.Read(prefix, 0, prefix.Length);
+                var header = string.Join('\n', new string(prefix, 0, read).Split('\n').Take(5));
+                if (Regex.IsMatch(header, @"(?im)^\s*(?://+|#+|/\*+|<!--)\s*(?:<auto-generated|auto[- ]generated|generated (?:code|file)|this file (?:is|was) generated|do not edit)")) reason = "generated-content-marker";
+            }
+            if (reason is null) continue; total++;
+            if (candidates.Count < limits.MaxItems) candidates.Add(new { path = normalized, reason });
+        }
+        return new { schemaVersion = 1, kind = "repository-hygiene", trackedFiles = tracked.Length, candidateCount = total, candidates, truncated = total > candidates.Count, policy = "Evidence-backed candidates only; no file is deleted and reachability is not inferred." };
+    }
+}
+
+public static class GitHub
+{
+    public static async Task<Result> Actions(string root, string artifacts, string? runId, bool failedLogs, OutputSettings limits)
+    {
+        if (failedLogs && runId is null) throw new ArgumentException("--failed-logs requires --run-id.");
+        if (runId is not null && (!long.TryParse(runId, NumberStyles.None, CultureInfo.InvariantCulture, out var id) || id <= 0)) throw new ArgumentException("--run-id must be a positive integer.");
+        if (failedLogs) return await AgentTool.RunArtifact("gh", ["run", "view", runId!, "--log-failed"], root, artifacts, limits);
+        var fields = "databaseId,name,displayTitle,workflowName,status,conclusion,event,headBranch,headSha,url,createdAt,updatedAt";
+        var arguments = runId is null ? new[] { "run", "list", "--limit", limits.MaxItems.ToString(CultureInfo.InvariantCulture), "--json", fields } : ["run", "view", runId, "--json", fields + ",jobs"];
+        var result = await Processes.Run("gh", arguments, root);
+        if (result.ExitCode != 0) return new("failed", new { evidence = Output.Compact(result.Output, limits) }, 1);
+        return Result.Ok(ParseActions(result.Output, runId is null, limits));
+    }
+
+    public static object ParseActions(string json, bool list, OutputSettings limits)
+    {
+        using var document = JsonDocument.Parse(json); var root = document.RootElement;
+        var runs = list ? root.EnumerateArray().ToArray() : [root];
+        var rows = runs.Take(limits.MaxItems).Select(run => new
+        {
+            id = Value(run, "databaseId"),
+            workflow = Text(run, "workflowName") ?? Text(run, "name"),
+            title = Text(run, "displayTitle"),
+            status = Text(run, "status"),
+            conclusion = Text(run, "conclusion"),
+            @event = Text(run, "event"),
+            branch = Text(run, "headBranch"),
+            sha = Text(run, "headSha"),
+            url = Text(run, "url"),
+            createdAt = Text(run, "createdAt"),
+            updatedAt = Text(run, "updatedAt")
+        }).ToArray();
+        var jobs = new List<object>(); int jobCount = 0, failedJobs = 0, cancelledJobs = 0;
+        if (!list && root.TryGetProperty("jobs", out var jobArray) && jobArray.ValueKind == JsonValueKind.Array)
+            foreach (var job in jobArray.EnumerateArray())
+            {
+                jobCount++; var conclusion = Text(job, "conclusion");
+                if (conclusion is "failure" or "timed_out" or "action_required") failedJobs++;
+                if (conclusion == "cancelled") cancelledJobs++;
+                if (jobs.Count >= limits.MaxItems) continue;
+                var failedSteps = job.TryGetProperty("steps", out var steps) && steps.ValueKind == JsonValueKind.Array
+                    ? steps.EnumerateArray().Where(step => Text(step, "conclusion") is "failure" or "cancelled" or "timed_out").Take(limits.MaxItems).Select(step => new { name = Text(step, "name"), number = Value(step, "number"), conclusion = Text(step, "conclusion") }).ToArray() : [];
+                jobs.Add(new { id = Value(job, "databaseId"), name = Text(job, "name"), status = Text(job, "status"), conclusion, startedAt = Text(job, "startedAt"), completedAt = Text(job, "completedAt"), url = Text(job, "url"), failedSteps });
+            }
+        return new { schemaVersion = 1, kind = "github-actions-summary", mode = list ? "runs" : "run", runCount = runs.Length, runs = rows, runsTruncated = runs.Length > rows.Length, jobCount, failedJobs, cancelledJobs, jobs, jobsTruncated = jobCount > jobs.Count, next = failedJobs > 0 ? "Fetch --failed-logs for this run and diagnose the earliest causal failure." : null };
+    }
+    static string? Text(JsonElement element, string property) => element.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+    static object? Value(JsonElement element, string property) => element.TryGetProperty(property, out var value) ? value.ValueKind switch { JsonValueKind.Number when value.TryGetInt64(out var number) => number, JsonValueKind.String => value.GetString(), _ => value.ToString() } : null;
 }
 
 public static class Results
@@ -1028,18 +1121,79 @@ public static class Output
         }
         return new { lines, errorLines = errors, warningLines = warnings, evidence = Compact(string.Join('\n', interesting.Count > 0 ? interesting.AsEnumerable() : tail), limits), artifact = Path.GetFullPath(path), note = "Text counts are matching lines, not a build success verdict." };
     }
-    public static object Sarif(string path, OutputSettings limits)
+    public static object Sarif(string path, OutputSettings limits, string? baseline = null)
+    {
+        var current = SarifFindings(path, limits); var prior = baseline is null ? [] : SarifFindings(baseline, limits);
+        var priorKeys = prior.Select(x => x.Key).ToHashSet(StringComparer.Ordinal); var currentKeys = current.Select(x => x.Key).ToHashSet(StringComparer.Ordinal);
+        var added = current.Where(x => !priorKeys.Contains(x.Key)).ToArray(); var fixedFindings = prior.Where(x => !currentKeys.Contains(x.Key)).ToArray();
+        return new
+        {
+            schemaVersion = 1,
+            kind = "sarif-summary",
+            count = current.Length,
+            results = current.Take(limits.MaxItems).Select(x => x.Evidence),
+            truncated = current.Length > limits.MaxItems,
+            baseline = baseline is null ? null : new { artifact = Path.GetFullPath(baseline), count = prior.Length, added = added.Length, unchanged = current.Length - added.Length, fixedCount = fixedFindings.Length, newResults = added.Take(limits.MaxItems).Select(x => x.Evidence), newResultsTruncated = added.Length > limits.MaxItems, fixedResults = fixedFindings.Take(limits.MaxItems).Select(x => x.Evidence), fixedResultsTruncated = fixedFindings.Length > limits.MaxItems },
+            artifact = Path.GetFullPath(path)
+        };
+    }
+    static SarifFinding[] SarifFindings(string path, OutputSettings limits)
     {
         using var doc = JsonDocument.Parse(File.ReadAllText(path));
-        var rows = new List<object>(); int count = 0;
-        foreach (var run in doc.RootElement.GetProperty("runs").EnumerateArray())
-            if (run.TryGetProperty("results", out var results)) foreach (var result in results.EnumerateArray())
+        if (!doc.RootElement.TryGetProperty("runs", out var runs) || runs.ValueKind != JsonValueKind.Array) throw new FormatException("SARIF has no runs array.");
+        var rows = new List<SarifFinding>();
+        foreach (var run in runs.EnumerateArray())
+            if (run.TryGetProperty("results", out var results) && results.ValueKind == JsonValueKind.Array) foreach (var result in results.EnumerateArray())
                 {
-                    count++;
-                    if (rows.Count < limits.MaxItems) rows.Add(new { rule = result.TryGetProperty("ruleId", out var rule) ? rule.GetString() : null, level = result.TryGetProperty("level", out var level) ? level.GetString() : "warning", message = Compact(result.GetProperty("message").TryGetProperty("text", out var text) ? text.GetString() ?? "" : result.GetProperty("message").ToString(), limits), locations = result.TryGetProperty("locations", out var locations) ? locations.EnumerateArray().Take(1).Select(x => x.Clone()).ToArray() : [] });
+                    var rule = result.TryGetProperty("ruleId", out var ruleValue) ? ruleValue.GetString() : null;
+                    var level = result.TryGetProperty("level", out var levelValue) ? levelValue.GetString() : "warning";
+                    var message = result.TryGetProperty("message", out var messageValue) && messageValue.TryGetProperty("text", out var text) ? text.GetString() ?? "" : result.TryGetProperty("message", out messageValue) ? messageValue.ToString() : "";
+                    string? uri = null; int? line = null;
+                    if (result.TryGetProperty("locations", out var locations) && locations.ValueKind == JsonValueKind.Array && locations.GetArrayLength() > 0)
+                    {
+                        var physical = locations[0].TryGetProperty("physicalLocation", out var physicalValue) ? physicalValue : default;
+                        if (physical.ValueKind == JsonValueKind.Object && physical.TryGetProperty("artifactLocation", out var artifactLocation) && artifactLocation.TryGetProperty("uri", out var uriValue)) uri = uriValue.GetString();
+                        if (physical.ValueKind == JsonValueKind.Object && physical.TryGetProperty("region", out var region) && region.TryGetProperty("startLine", out var lineValue) && lineValue.TryGetInt32(out var parsedLine)) line = parsedLine;
+                    }
+                    var fingerprint = result.TryGetProperty("partialFingerprints", out var fingerprints) && fingerprints.ValueKind == JsonValueKind.Object
+                        ? string.Join('|', fingerprints.EnumerateObject().OrderBy(x => x.Name, StringComparer.Ordinal).Select(x => x.Name + "=" + x.Value.ToString())) : null;
+                    var key = fingerprint is { Length: > 0 } ? rule + "|" + fingerprint : string.Join('|', rule, uri, line?.ToString(CultureInfo.InvariantCulture), message);
+                    var suppression = result.TryGetProperty("suppressions", out var suppressions) && suppressions.ValueKind == JsonValueKind.Array ? suppressions.EnumerateArray().Select(x => x.Clone()).ToArray() : [];
+                    rows.Add(new(key, new { rule, level, message = Compact(message, limits), location = new { uri, startLine = line }, suppressions = suppression }));
                 }
-        return new { count, results = rows, truncated = count > rows.Count, artifact = Path.GetFullPath(path) };
+        return rows.ToArray();
     }
+    sealed record SarifFinding(string Key, object Evidence);
+}
+
+public static class Artifacts
+{
+    public static object Inspect(string path, OutputSettings limits)
+    {
+        path = Path.GetFullPath(path); if (!File.Exists(path)) throw new ArgumentException("Artifact does not exist.");
+        var info = new FileInfo(path); var sha256 = Hash(path); var extension = Path.GetExtension(path).ToLowerInvariant();
+        if (extension != ".zip") return new { schemaVersion = 1, kind = "artifact-inspection", path, format = "file", info.Length, sha256 };
+        using var archive = System.IO.Compression.ZipFile.OpenRead(path); var names = new HashSet<string>(StringComparer.Ordinal); var entries = new List<object>(); var issues = new List<object>(); long unpacked = 0; int issueCount = 0;
+        foreach (var entry in archive.Entries)
+        {
+            var name = entry.FullName.Replace('\\', '/'); unpacked += entry.Length; var reasons = new List<string>();
+            if (name.StartsWith("/", StringComparison.Ordinal) || Regex.IsMatch(name, @"^[A-Za-z]:/") || name.Split('/').Contains("..", StringComparer.Ordinal)) reasons.Add("path-traversal");
+            if (!names.Add(name)) reasons.Add("duplicate-path");
+            if (((entry.ExternalAttributes >> 16) & 0xF000) == 0xA000) reasons.Add("symbolic-link");
+            if (entry.Length > 1_000_000_000 || entry.CompressedLength > 0 && entry.Length / (double)entry.CompressedLength > 1000) reasons.Add("expansion-risk");
+            if (entries.Count < limits.MaxItems) entries.Add(new { path = name, entry.Length, entry.CompressedLength });
+            issueCount += reasons.Count; foreach (var reason in reasons) if (issues.Count < limits.MaxItems) issues.Add(new { path = name, reason });
+        }
+        return new { schemaVersion = 1, kind = "artifact-inspection", path, format = "zip", info.Length, sha256, entryCount = archive.Entries.Count, unpackedBytes = unpacked, entries, entriesTruncated = archive.Entries.Count > entries.Count, issueCount, issues, issuesTruncated = issueCount > issues.Count, safeToExtract = issueCount == 0 };
+    }
+    public static Result Verify(string path, string expected)
+    {
+        if (!Regex.IsMatch(expected, "^[0-9a-fA-F]{64}$", RegexOptions.CultureInvariant)) throw new ArgumentException("--sha256 must be 64 hexadecimal characters.");
+        path = Path.GetFullPath(path); if (!File.Exists(path)) throw new ArgumentException("Artifact does not exist.");
+        var actual = Hash(path); var matches = CryptographicOperations.FixedTimeEquals(Convert.FromHexString(actual), Convert.FromHexString(expected));
+        return new(matches ? "ok" : "mismatch", new { schemaVersion = 1, kind = "artifact-verification", path, algorithm = "SHA-256", expected = expected.ToLowerInvariant(), actual, matches }, matches ? 0 : 1);
+    }
+    static string Hash(string path) { using var stream = File.OpenRead(path); return Convert.ToHexStringLower(SHA256.HashData(stream)); }
 }
 
 public static class DotnetArtifacts

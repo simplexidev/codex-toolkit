@@ -1,0 +1,39 @@
+{
+  "databaseId": 4242,
+  "name": "CI",
+  "displayTitle": "Validate pull request",
+  "workflowName": "CI",
+  "status": "completed",
+  "conclusion": "failure",
+  "event": "pull_request",
+  "headBranch": "feature/example",
+  "headSha": "1111111111111111111111111111111111111111",
+  "url": "https://example.invalid/actions/runs/4242",
+  "createdAt": "2026-01-01T00:00:00Z",
+  "updatedAt": "2026-01-01T00:02:00Z",
+  "jobs": [
+    {
+      "databaseId": 99,
+      "name": "test",
+      "status": "completed",
+      "conclusion": "failure",
+      "startedAt": "2026-01-01T00:00:05Z",
+      "completedAt": "2026-01-01T00:01:55Z",
+      "url": "https://example.invalid/actions/jobs/99",
+      "steps": [
+        { "number": 1, "name": "Checkout", "status": "completed", "conclusion": "success" },
+        { "number": 2, "name": "Test", "status": "completed", "conclusion": "failure" }
+      ]
+    },
+    {
+      "databaseId": 100,
+      "name": "package",
+      "status": "completed",
+      "conclusion": "cancelled",
+      "startedAt": "2026-01-01T00:00:05Z",
+      "completedAt": "2026-01-01T00:02:00Z",
+      "url": "https://example.invalid/actions/jobs/100",
+      "steps": []
+    }
+  ]
+}
