@@ -1,10 +1,8 @@
 # Contributing
 
-Follow AGENTS.md. Extend tools/AgentTool.cs for production logic; add focused tests for
-observable behavior. Synchronize config schemas and docs. Keep skill triggers narrow.
-Run dotnet test tests/AgentTool.Tests/AgentTool.Tests.csproj, utility validate/eval and
-git diff --check before review. Never use live JEV in tests or install into your real home.
+Contributor setup, development workflow, testing, skill authoring, and pull-request
+guidance live in the
+[`codex-toolkit-docs` contributor guide](https://github.com/simplexidev/codex-toolkit-docs/tree/main/docs/contributing).
 
-Test-only NuGet dependencies are justified: xUnit/Test SDK provide standard discovery;
-YamlDotNet, Tomlyn and JsonSchema.Net validate real standards instead of approximate
-homegrown parsers. They are not runtime dependencies of the utility.
+Repository-local agent instructions remain canonical in [AGENTS.md](AGENTS.md). Before
+review, run the validation commands in [README.md](README.md) and `git diff --check`.
