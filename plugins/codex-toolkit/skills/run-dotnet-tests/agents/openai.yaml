@@ -1,0 +1,6 @@
+interface:
+  display_name: "Run Dotnet Tests"
+  short_description: Plan or run the smallest relevant .NET test scope.
+  default_prompt: "Use $run-dotnet-tests."
+policy:
+  allow_implicit_invocation: true

@@ -48,9 +48,12 @@ complete at its pinned SHA but remains lazy routing metadata, not default contex
 5. Add generated/orphan candidate reporting only when provenance and reachability
    evidence can be explained per item.
 
-No new skill is justified by this audit alone. The current overlaps are mostly
-intentional composition: `dotnet-verify` executes tests while `test-quality`
-assesses them; `dependency-change` consumes `package-audit`; diagnostics selects
+The testing optimization adds four narrow skills because measured upstream testing
+context did not improve baseline correctness and materially increased cost. Their
+overlap is intentional composition: `run-dotnet-tests` executes evidence,
+`write-dotnet-tests` authors cases, `dotnet-test-quality` assesses design, and
+`dotnet-coverage` interprets counters. Elsewhere, `dependency-change` consumes
+`package-audit`; diagnostics selects
 evidence while performance investigation reasons from it; and release verification
 orchestrates but does not claim optional API, SBOM, packaging, or reproducibility
 gates. Metrics should track activation precision, static routing cost, unnecessary

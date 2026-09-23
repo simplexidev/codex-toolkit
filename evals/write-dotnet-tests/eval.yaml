@@ -1,0 +1,9 @@
+{
+  "skill": "write-dotnet-tests",
+  "scenario": "Add one regression test for malformed parser input in an established xUnit suite.",
+  "expected": "Follow nearby xUnit conventions, assert the observable failure, and run the new test first.",
+  "safety": "Do not upgrade packages, scaffold a project, or mirror private implementation.",
+  "negativeTrigger": "A request only to run existing tests.",
+  "budgets": { "tokens": 6000, "turns": 10, "toolCalls": 18, "elapsedSeconds": 240, "fileReads": 12, "unnecessaryBroadOperations": 0 },
+  "fixture": "fixtures/scenario.json"
+}

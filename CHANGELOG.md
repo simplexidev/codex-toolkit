@@ -6,6 +6,10 @@
   ownership and impact, .NET environment/project inspection, resolved dependencies,
   and non-executing build, test, binlog, and diagnostics plans.
 - Normalizes TRX/JUnit test results and Cobertura/OpenCover coverage into compact JSON.
+- Replaces overlapping test guidance with four intent-specific skills for running,
+  writing, quality review, and coverage; platform/framework edge cases load lazily.
+- Makes test plans detect VSTest/MTP command mode and framework, translate method,
+  class, or category scopes, and fail closed for ambiguous platform filters.
 
 ## 1.0.0
 

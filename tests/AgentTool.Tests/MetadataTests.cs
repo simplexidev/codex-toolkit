@@ -177,6 +177,34 @@ public class MetadataTests
     }
 
     [Fact]
+    public void OptimizedDotnetTestSkillsStayCompactAttributedAndLazy()
+    {
+        var skillsRoot = Path.Combine(Root, "plugins/codex-toolkit/skills");
+        var names = Directory.GetDirectories(skillsRoot).Select(Path.GetFileName).ToHashSet(StringComparer.Ordinal);
+        foreach (var name in new[] { "run-dotnet-tests", "write-dotnet-tests", "dotnet-test-quality", "dotnet-coverage" }) Assert.Contains(name, names);
+        Assert.DoesNotContain("dotnet-verify", names); Assert.DoesNotContain("test-quality", names);
+
+        var files = new[]
+        {
+            "plugins/codex-toolkit/skills/run-dotnet-tests/SKILL.md",
+            "plugins/codex-toolkit/skills/write-dotnet-tests/SKILL.md",
+            "plugins/codex-toolkit/skills/dotnet-test-quality/SKILL.md",
+            "plugins/codex-toolkit/skills/dotnet-coverage/SKILL.md",
+            "plugins/codex-toolkit/references/test-platform-edge-cases.md",
+            "plugins/codex-toolkit/references/test-framework-edge-cases.md",
+            "plugins/codex-toolkit/references/test-quality-checks.md"
+        };
+        Assert.InRange(files.Sum(file => new FileInfo(Path.Combine(Root, file)).Length), 1, 12_000);
+        Assert.All(files.Take(4), file => Assert.InRange(new FileInfo(Path.Combine(Root, file)).Length, 1, 2_500));
+        foreach (var file in files.Skip(4))
+        {
+            var text = File.ReadAllText(Path.Combine(Root, file));
+            Assert.Contains("4ed5f7c121da8dd31af31a35cef05070948c6556", text, StringComparison.Ordinal);
+            Assert.Contains("plugins/dotnet-test/skills/", text, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
     public void LiveJevWorkflowIsManuallyOrLowFrequencyTriggeredAndSecretIsStepScoped()
     {
         var workflow = File.ReadAllText(Path.Combine(Root, ".github/workflows/jev-integration.yml"));

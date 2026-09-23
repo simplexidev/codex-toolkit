@@ -22,7 +22,7 @@
       "routing": { "primary": "deterministic", "fallback": ["agent"], "reason": "Paths and project references are exact repository facts." },
       "staticCost": { "level": "none", "activation": "none", "loads": [], "concern": "Commands need no skill activation; avoid loading broad repository maps." },
       "gaps": ["Non-.NET dependency graphs are not modeled."],
-      "duplication": ["dotnet-verify consumes affected-project output without duplicating discovery."],
+      "duplication": ["run-dotnet-tests consumes affected-project output without duplicating discovery."],
       "recommendedAction": "Retain command-only routing and add graph types only when an owned runtime needs them."
     },
     {
@@ -151,7 +151,7 @@
       "existingSupport": [
         { "kind": "agent", "id": "Codex", "scope": "Searches consumers, edits code and verifies behavior." },
         { "kind": "agent-tool", "id": "repo changed-files", "scope": "Bounds the resulting diff." },
-        { "kind": "skill", "id": "dotnet-verify", "scope": "Targets affected validation." }
+        { "kind": "agent-tool", "id": "dotnet verify", "scope": "Targets affected .NET validation." }
       ],
       "opportunities": { "deterministic": "Use language/compiler tools for exact references when available.", "jev": "No fit for code transformation.", "agent": "Own behavior-preserving edits and refactor judgment." },
       "routing": { "primary": "agent", "fallback": ["stronger-agent"], "reason": "Edits require repository-specific semantic reasoning after deterministic search." },
@@ -187,12 +187,12 @@
         { "kind": "agent-tool", "id": "dotnet inspect", "scope": "Normalizes SDK, TFM, package, test-platform and project-reference facts." },
         { "kind": "agent-tool", "id": "dotnet build-plan", "scope": "Constructs affected restore/build/binlog commands without executing them." },
         { "kind": "agent-tool", "id": "dotnet format", "scope": "Checks or applies formatting to changed C# files." },
-        { "kind": "skill", "id": "dotnet-verify", "scope": "Selects targeted validation." },
+        { "kind": "skill", "id": "run-dotnet-tests", "scope": "Selects exact targeted test commands." },
         { "kind": "upstream", "id": "dotnet-advanced", "scope": "Optional advanced C# workflows." }
       ],
       "opportunities": { "deterministic": "Keep project evaluation, compiler diagnostics and formatting tool-driven.", "jev": "No fit for compiler facts or code generation.", "agent": "Implement and diagnose within project conventions." },
       "routing": { "primary": "deterministic", "fallback": ["agent", "stronger-agent"], "reason": "Compiler and SDK evidence precede code reasoning." },
-      "staticCost": { "level": "low", "activation": "implicit", "loads": ["dotnet-verify", "dotnet-format"], "concern": "Activate formatting only when C# changes exist." },
+      "staticCost": { "level": "low", "activation": "implicit", "loads": ["run-dotnet-tests", "dotnet-format"], "concern": "Activate testing or formatting only when the requested change needs it." },
       "gaps": ["Advanced C# assistance depends on host or separately installed upstream capabilities."],
       "duplication": ["dotnet release-verify is intentionally broader than dotnet verify."],
       "recommendedAction": "Retain focused skills and reference upstream advanced capabilities rather than vendoring them."
@@ -204,18 +204,21 @@
       "coverage": "supported",
       "existingSupport": [
         { "kind": "agent-tool", "id": "dotnet verify", "scope": "Runs detected affected test projects." },
-        { "kind": "agent-tool", "id": "dotnet test-plan", "scope": "Detects platforms and constructs filtered affected-test commands." },
+        { "kind": "agent-tool", "id": "dotnet test-plan", "scope": "Detects framework, platform and command mode, then constructs filtered affected-test commands." },
         { "kind": "agent-tool", "id": "test-results summarize", "scope": "Normalizes bounded TRX and JUnit outcomes." },
         { "kind": "agent-tool", "id": "coverage summarize", "scope": "Normalizes exact Cobertura and OpenCover counters." },
-        { "kind": "skill", "id": "test-quality", "scope": "Assesses assertions, coverage and optional mutation testing." },
+        { "kind": "skill", "id": "run-dotnet-tests", "scope": "Plans or runs the smallest relevant test scope." },
+        { "kind": "skill", "id": "write-dotnet-tests", "scope": "Adds behavior-discriminating tests in the established framework." },
+        { "kind": "skill", "id": "dotnet-test-quality", "scope": "Reviews behavioral gaps, assertions and false-pass risks." },
+        { "kind": "skill", "id": "dotnet-coverage", "scope": "Collects or interprets targeted coverage evidence." },
         { "kind": "upstream", "id": "dotnet-test", "scope": "Optional test-platform-specific workflows." }
       ],
-      "opportunities": { "deterministic": "Detect platforms and preserve structured test results.", "jev": "No fit for pass/fail or coverage facts.", "agent": "Judge missing behavioral cases and causal failures." },
+      "opportunities": { "deterministic": "Detect scope, framework, platform, command mode and filters; preserve structured results and coverage counters.", "jev": "Rank only large sanitized relevance candidate sets after exact evidence.", "agent": "Write tests and judge behavioral gaps or causal failures." },
       "routing": { "primary": "deterministic", "fallback": ["agent"], "reason": "Test runners produce facts; adequacy needs code reasoning." },
-      "staticCost": { "level": "low", "activation": "implicit", "loads": ["dotnet-verify", "test-quality"], "concern": "Do not load test-quality for every routine test run." },
+      "staticCost": { "level": "low", "activation": "implicit", "loads": ["run-dotnet-tests", "write-dotnet-tests", "dotnet-test-quality", "dotnet-coverage"], "concern": "Route to one intent-specific skill and load edge-case references only after detection requires them." },
       "gaps": ["Coverage planning and mutation-test formats remain project-specific."],
-      "duplication": ["dotnet-verify executes tests; test-quality evaluates their design."],
-      "recommendedAction": "Keep result and coverage facts in versioned AgentTool contracts; reserve behavioral adequacy for the agent."
+      "duplication": ["run-dotnet-tests executes evidence; dotnet-test-quality evaluates design; dotnet-coverage interprets counters."],
+      "recommendedAction": "Keep scope, filters, results and coverage facts in AgentTool; reserve authoring and behavioral adequacy for the agent."
     },
     {
       "id": "msbuild",

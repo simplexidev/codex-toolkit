@@ -19,8 +19,8 @@ entry files and separately report supporting files.
 | --- | --- | --- |
 | Test platform detection/execution | `REPLACE_WITH_AGENTTOOL` | Keep project/platform discovery, command construction and result normalization deterministic; retain filter syntax as lazy knowledge. |
 | Coverage, CRAP and untested-source facts | `REPLACE_WITH_AGENTTOOL` | Parse formats and calculate metrics in AgentTool; GPT judges behavioral significance. |
-| Test quality taxonomies | `CONVERT_TO_REFERENCE` | Later extract small assertion/gap/smell catalogs; do not load six overlapping skills. |
-| Test authoring, testability and migrations | `KEEP_UPSTREAM` | Select only the exact framework or migration workflow. |
+| Test quality taxonomies | `CONVERT_TO_REFERENCE` | Load the compact quality checks only for an explicit audit or unclear candidate; do not load six overlapping skills. |
+| Test authoring, testability and migrations | `KEEP_UPSTREAM` | Use the compact local workflow first; select exact upstream framework or migration guidance only when repository patterns are insufficient. |
 | MSBuild binlogs and performance | `KEEP_UPSTREAM` | Prefer the upstream binlog workflow and prerelease BinlogMcp on demand; measurements remain deterministic. |
 | MSBuild authoring patterns | `CONVERT_TO_REFERENCE` | Later index compact pitfalls after evaluated project facts are known. |
 | Runtime diagnostics and performance | `KEEP_UPSTREAM` | Choose one collector or analysis branch; never send raw sensitive dumps/traces to JEV. |
