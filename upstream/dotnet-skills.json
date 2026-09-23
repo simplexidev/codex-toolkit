@@ -106,7 +106,7 @@
       "upstreamPaths": ["plugins/dotnet-test/skills/platform-detection/SKILL.md", "plugins/dotnet-test/skills/run-tests/SKILL.md", "plugins/dotnet-test/skills/filter-syntax/SKILL.md", "plugins/dotnet-test/skills/mtp-hot-reload/SKILL.md"],
       "classification": "REPLACE_WITH_AGENTTOOL", "trigger": "Exact platform detection, bounded test execution, filter translation, or MTP watch behavior.",
       "referenceLoading": "Keep filter syntax lazy after detection; never load all four for routine verification.", "staticCost": { "level": "high", "scope": "Four skills, about 43.7 KB/6.1K words before references." },
-      "toolsAndMcps": ["dotnet test", "dotnet exec", "Microsoft.Testing.Platform", "VSTest filters"], "currentToolkitUse": ["AgentTool dotnet verify", "dotnet-verify skill", "test-quality skill"],
+      "toolsAndMcps": ["dotnet test", "dotnet exec", "Microsoft.Testing.Platform", "VSTest filters"], "currentToolkitUse": ["AgentTool dotnet test-plan", "AgentTool test-results summarize", "run-dotnet-tests skill", "test-platform-edge-cases reference"],
       "deterministicParts": "Detect projects/platform, construct commands, capture exit/results and normalize bounded output in AgentTool.", "jevSuitableParts": "None for identity, filters, pass/fail or watch state.",
       "gptExpertValue": "Explain framework filters and diagnose the first causal failure after structured evidence.", "rationale": "The toolkit already owns targeted execution; a parallel orchestrator would duplicate routing."
     },
@@ -115,7 +115,7 @@
       "upstreamPaths": ["plugins/dotnet-test/skills/coverage-analysis/SKILL.md", "plugins/dotnet-test/skills/crap-score/SKILL.md", "plugins/dotnet-test/skills/find-untested-sources/SKILL.md"],
       "classification": "REPLACE_WITH_AGENTTOOL", "trigger": "Coverage, CRAP score, or source-to-test correlation is explicitly requested.",
       "referenceLoading": "Load reporting guidance only after formats and installed tools are detected.", "staticCost": { "level": "high", "scope": "Three skills plus six references and three mixed-language scripts exceed 100 KB." },
-      "toolsAndMcps": ["coverlet", "ReportGenerator", "Compute-CrapScores.ps1", "Extract-MethodCoverage.ps1", "Find-UntestedSources.cs", "find_untested_sources.py"], "currentToolkitUse": ["test-quality skill", "AgentTool dotnet verify"],
+      "toolsAndMcps": ["coverlet", "ReportGenerator", "Compute-CrapScores.ps1", "Extract-MethodCoverage.ps1", "Find-UntestedSources.cs", "find_untested_sources.py"], "currentToolkitUse": ["AgentTool coverage summarize", "dotnet-coverage skill"],
       "deterministicParts": "Parse coverage formats, calculate metrics and correlate source/test candidates in AgentTool.", "jevSuitableParts": "Rank a large sanitized candidate set only after exact metrics; never calculate coverage.",
       "gptExpertValue": "Judge whether uncovered behavior matters and propose boundary-focused tests.", "rationale": "The useful core is deterministic and mixed-language helpers conflict with the single .NET executable architecture."
     },
@@ -123,17 +123,17 @@
       "id": "test-quality-review", "capabilities": ["tests"], "plugin": "dotnet-test",
       "upstreamPaths": ["plugins/dotnet-test/skills/assertion-quality/SKILL.md", "plugins/dotnet-test/skills/grade-tests/SKILL.md", "plugins/dotnet-test/skills/test-anti-patterns/SKILL.md", "plugins/dotnet-test/skills/test-gap-analysis/SKILL.md", "plugins/dotnet-test/skills/test-smell-detection/SKILL.md", "plugins/dotnet-test/skills/test-tagging/SKILL.md"],
       "classification": "CONVERT_TO_REFERENCE", "trigger": "Explicit review of adequacy, assertions, gaps, smells, grading, or categorization.",
-      "referenceLoading": "Later create a compact taxonomy and load only the requested quality dimension.", "staticCost": { "level": "very-high", "scope": "Six overlapping skills total roughly 115 KB." },
-      "toolsAndMcps": ["test runners", "coverage reports", "mutation tooling"], "currentToolkitUse": ["test-quality skill"],
+      "referenceLoading": "Load the compact test-quality-checks reference only for an explicit audit or unclear candidate.", "staticCost": { "level": "very-high", "scope": "Six overlapping skills total roughly 115 KB." },
+      "toolsAndMcps": ["test runners", "coverage reports", "mutation tooling"], "currentToolkitUse": ["dotnet-test-quality skill", "test-quality-checks reference"],
       "deterministicParts": "Collect assertions, names, coverage and mutation evidence before review.", "jevSuitableParts": "Triage sanitized smell candidates by confidence, not final adequacy.",
-      "gptExpertValue": "Relate tests to behavior and design discriminating cases.", "rationale": "Expert taxonomies are useful but overlap heavily; compact lazy reference is the right future shape."
+      "gptExpertValue": "Relate tests to behavior and design discriminating cases.", "rationale": "Expert taxonomies are useful but overlap heavily; one compact lazy reference preserves the high-signal checks."
     },
     {
       "id": "test-authoring", "capabilities": ["tests"], "plugin": "dotnet-test",
       "upstreamPaths": ["plugins/dotnet-test/skills/scaffold-dotnet-test-project/SKILL.md", "plugins/dotnet-test/skills/writing-mstest-tests/SKILL.md", "plugins/dotnet-test/skills/code-testing-agent/SKILL.md", "plugins/dotnet-test/skills/code-testing-extensions/SKILL.md", "plugins/dotnet-test/skills/test-analysis-extensions/SKILL.md"],
       "classification": "KEEP_UPSTREAM", "trigger": "Explicit scaffolding or test-authoring request needs framework-specific examples.",
-      "referenceLoading": "Select only the .NET extension; never load cross-language catalogs wholesale.", "staticCost": { "level": "very-high", "scope": "Five entry skills plus dozens of language-specific support files." },
-      "toolsAndMcps": ["dotnet new", "dotnet test", "MSTest", "xUnit", "NUnit", "TUnit"], "currentToolkitUse": ["AgentTool repo affected-projects", "AgentTool dotnet verify", "test-quality skill"],
+      "referenceLoading": "Use the compact local authoring workflow first; select only the exact upstream framework guidance when repository patterns are insufficient.", "staticCost": { "level": "very-high", "scope": "Five entry skills plus dozens of language-specific support files." },
+      "toolsAndMcps": ["dotnet new", "dotnet test", "MSTest", "xUnit", "NUnit", "TUnit"], "currentToolkitUse": ["AgentTool dotnet inspect", "AgentTool dotnet test-plan", "write-dotnet-tests skill", "test-framework-edge-cases reference"],
       "deterministicParts": "Discover repository style/framework and execute generated tests.", "jevSuitableParts": "No fit for code generation.",
       "gptExpertValue": "Generate conventional tests with behavior-discriminating assertions.", "rationale": "Valuable on demand but too broad and multi-language to absorb."
     },
@@ -142,7 +142,7 @@
       "upstreamPaths": ["plugins/dotnet-test/skills/detect-static-dependencies/SKILL.md", "plugins/dotnet-test/skills/generate-testability-wrappers/SKILL.md", "plugins/dotnet-test/skills/migrate-static-to-wrapper/SKILL.md", "plugins/dotnet-test/skills/testability-obstacle/SKILL.md"],
       "classification": "KEEP_UPSTREAM", "trigger": "Explicit testability analysis or wrapper migration around static dependencies.",
       "referenceLoading": "Load diagnosis first; transformation follows an accepted design.", "staticCost": { "level": "very-high", "scope": "Four skills total roughly 67 KB/9.3K words." },
-      "toolsAndMcps": ["rg", "dotnet build", "dotnet test"], "currentToolkitUse": ["architecture-change skill", "dotnet-verify skill", "api-compatibility skill"],
+      "toolsAndMcps": ["rg", "dotnet build", "dotnet test"], "currentToolkitUse": ["architecture-change skill", "run-dotnet-tests skill", "api-compatibility skill"],
       "deterministicParts": "Inventory calls, consumers, public changes and validation results.", "jevSuitableParts": "Only screen a large sanitized candidate list.",
       "gptExpertValue": "Judge seams, compatibility and staged refactoring tradeoffs.", "rationale": "Specialized reasoning value exceeds a compact generic workflow."
     },
@@ -151,7 +151,7 @@
       "upstreamPaths": ["plugins/dotnet-experimental/skills/exp-mock-usage-analysis/SKILL.md", "plugins/dotnet-experimental/skills/exp-test-maintainability/SKILL.md"],
       "classification": "DO_NOT_INSTALL", "trigger": "Explicit experimental mock-use or suite-maintainability evaluation.",
       "referenceLoading": "None by default; reconsider after upstream graduation and measured toolkit need.", "staticCost": { "level": "medium", "scope": "Two experimental skills total 15.7 KB." },
-      "toolsAndMcps": ["rg", "test source inspection"], "currentToolkitUse": ["test-quality skill"],
+      "toolsAndMcps": ["rg", "test source inspection"], "currentToolkitUse": ["dotnet-test-quality skill"],
       "deterministicParts": "Collect duplication and mock-setup candidates.", "jevSuitableParts": "Cluster sanitized low-risk candidates.",
       "gptExpertValue": "Trace behavior and distinguish intentional duplication.", "rationale": "Experimental status and overlap do not justify installation."
     },
@@ -178,7 +178,7 @@
       "upstreamPaths": ["plugins/dotnet-msbuild/skills/check-bin-obj-clash/SKILL.md", "plugins/dotnet-msbuild/skills/copy-to-output-directory/SKILL.md", "plugins/dotnet-msbuild/skills/directory-build-organization/SKILL.md", "plugins/dotnet-msbuild/skills/extension-points/SKILL.md", "plugins/dotnet-msbuild/skills/including-generated-files/SKILL.md", "plugins/dotnet-msbuild/skills/item-management/SKILL.md", "plugins/dotnet-msbuild/skills/msbuild-antipatterns/SKILL.md", "plugins/dotnet-msbuild/skills/msbuild-modernization/SKILL.md", "plugins/dotnet-msbuild/skills/property-patterns/SKILL.md", "plugins/dotnet-msbuild/skills/target-authoring/SKILL.md"],
       "classification": "CONVERT_TO_REFERENCE", "trigger": "A concrete MSBuild edit matches a pitfall after properties/imports are evaluated.",
       "referenceLoading": "Later extract an indexed pitfall catalog and load one section.", "staticCost": { "level": "very-high", "scope": "Ten overlapping skills exceed 120 KB plus references." },
-      "toolsAndMcps": ["dotnet msbuild", "MSBuild /pp", "Microsoft.AITools.BinlogMcp", "XML inspection"], "currentToolkitUse": ["AgentTool repo health", "architecture-change skill", "dotnet-verify skill"],
+      "toolsAndMcps": ["dotnet msbuild", "MSBuild /pp", "Microsoft.AITools.BinlogMcp", "XML inspection"], "currentToolkitUse": ["AgentTool repo health", "AgentTool dotnet verify", "architecture-change skill"],
       "deterministicParts": "Evaluate imports, properties, items, targets, paths and build results.", "jevSuitableParts": "No fit for evaluated facts; limited lint-candidate ranking.",
       "gptExpertValue": "Apply MSBuild semantics and explain evaluation/execution interactions.", "rationale": "Valuable but overlapping knowledge is better as a future compact lazy reference."
     },
@@ -223,7 +223,7 @@
       "upstreamPaths": ["plugins/dotnet-advanced/skills/csharp-scripts/SKILL.md"],
       "classification": "KEEP_UPSTREAM", "trigger": "Explicit project-free C# file-based app or one-file .NET experiment.",
       "referenceLoading": "Only for file-app syntax; repository code stays on project workflows.", "staticCost": { "level": "medium", "scope": "One focused 11.7 KB skill." },
-      "toolsAndMcps": ["dotnet run file.cs", "#:package", "#:project", "#:include", "#:property"], "currentToolkitUse": ["AgentTool is a .NET 10 file-based app", "dotnet-verify skill"],
+      "toolsAndMcps": ["dotnet run file.cs", "#:package", "#:project", "#:include", "#:property"], "currentToolkitUse": ["AgentTool is a .NET 10 file-based app", "AgentTool dotnet verify"],
       "deterministicParts": "SDK discovery, directive parsing and exit evidence.", "jevSuitableParts": "None.",
       "gptExpertValue": "Design concise apps and recognize when a project is warranted.", "rationale": "Narrow trigger and current syntax favor upstream reference, not duplication."
     },
@@ -232,7 +232,7 @@
       "upstreamPaths": ["plugins/dotnet-advanced/skills/dotnet-pinvoke/SKILL.md"],
       "classification": "KEEP_UPSTREAM", "trigger": "Concrete P/Invoke, ABI, marshalling, or source-generated interop work.",
       "referenceLoading": "Load type mapping or diagnostics after ABI, architecture and native signature are known.", "staticCost": { "level": "high", "scope": "One 19.4 KB skill plus two references." },
-      "toolsAndMcps": ["LibraryImport", "DllImport", "native headers", "dumpbin/nm/otool", "NativeLibrary"], "currentToolkitUse": ["api-compatibility skill", "dotnet-verify skill"],
+      "toolsAndMcps": ["LibraryImport", "DllImport", "native headers", "dumpbin/nm/otool", "NativeLibrary"], "currentToolkitUse": ["api-compatibility skill", "AgentTool dotnet verify"],
       "deterministicParts": "Extract signatures, architecture, calling convention, exports and diagnostics.", "jevSuitableParts": "None for ABI facts or widths.",
       "gptExpertValue": "Map ownership, layout, strings, callbacks and errors safely.", "rationale": "High-consequence specialist knowledge should remain explicit and evidence-backed."
     },
@@ -277,7 +277,7 @@
       "upstreamPaths": ["plugins/dotnet-upgrade/skills/dotnet-aot-compat/SKILL.md"],
       "classification": "KEEP_UPSTREAM", "trigger": "NativeAOT/trimming is required or analyzer/publish evidence reports incompatibility.",
       "referenceLoading": "Load polyfills only for a confirmed API gap; pair with API compatibility gate.", "staticCost": { "level": "high", "scope": "One 16.8 KB skill plus polyfill reference." },
-      "toolsAndMcps": ["PublishAot", "PublishTrimmed", "AOT/trimming analyzers", "dotnet publish"], "currentToolkitUse": ["AgentTool dotnet api-check", "api-compatibility skill", "dotnet-verify skill"],
+      "toolsAndMcps": ["PublishAot", "PublishTrimmed", "AOT/trimming analyzers", "dotnet publish"], "currentToolkitUse": ["AgentTool dotnet api-check", "AgentTool dotnet verify", "api-compatibility skill"],
       "deterministicParts": "Use analyzers, publish outcome, API baselines and smoke tests.", "jevSuitableParts": "None for compatibility facts.",
       "gptExpertValue": "Choose design alternatives and assess consumer/runtime impact.", "rationale": "Complements the general API gate for actual AOT/trimming scope."
     },
@@ -286,7 +286,7 @@
       "upstreamPaths": ["plugins/dotnet-upgrade/skills/migrate-dotnet8-to-dotnet9/SKILL.md", "plugins/dotnet-upgrade/skills/migrate-dotnet9-to-dotnet10/SKILL.md", "plugins/dotnet-upgrade/skills/migrate-dotnet10-to-dotnet11/SKILL.md", "plugins/dotnet-upgrade/skills/migrate-nullable-references/SKILL.md", "plugins/dotnet-upgrade/skills/thread-abort-migration/SKILL.md"],
       "classification": "KEEP_UPSTREAM", "trigger": "Specific target-framework, nullable, or Thread.Abort migration.",
       "referenceLoading": "Load the exact migration/subsystem and verify current official docs as versions move.", "staticCost": { "level": "very-high", "scope": "Five skills plus 32 support files exceed 230 KB." },
-      "toolsAndMcps": ["dotnet build", "dotnet test", "API analyzers", "Get-NullableReadiness.ps1"], "currentToolkitUse": ["architecture-change skill", "api-compatibility skill", "dotnet-verify skill"],
+      "toolsAndMcps": ["dotnet build", "dotnet test", "API analyzers", "Get-NullableReadiness.ps1"], "currentToolkitUse": ["AgentTool dotnet verify", "architecture-change skill", "api-compatibility skill"],
       "deterministicParts": "Inventory TFMs, packages, diagnostics, public surface and affected projects.", "jevSuitableParts": "Screen sanitized warning sets after compiler categorization.",
       "gptExpertValue": "Plan staged migration and adapt repository-specific code.", "rationale": "Version-specific expertise is useful upstream and should not be frozen into runtime."
     },
@@ -322,7 +322,7 @@
       "upstreamPaths": ["plugins/dotnet-aspnetcore/skills/configuring-opentelemetry-dotnet/SKILL.md", "plugins/dotnet-aspnetcore/skills/convert-blazor-server-to-webapp/SKILL.md", "plugins/dotnet-aspnetcore/skills/dotnet-webapi/SKILL.md", "plugins/dotnet-aspnetcore/skills/minimal-api-file-upload/SKILL.md", "plugins/dotnet-data/skills/create-datadriven-aspnetcore/SKILL.md", "plugins/dotnet-data/skills/optimizing-ef-core-queries/SKILL.md"],
       "classification": "KEEP_UPSTREAM", "trigger": "Concrete ASP.NET Core, OTel, upload, scaffolding, or EF query task.",
       "referenceLoading": "Select the exact web/data skill only.", "staticCost": { "level": "very-high", "scope": "Six skills across two plugins total about 83 KB." },
-      "toolsAndMcps": ["ASP.NET Core", "OpenTelemetry SDK", "EF Core", "database query logging"], "currentToolkitUse": ["dotnet-verify skill", "diagnostics skill", "performance-investigation skill"],
+      "toolsAndMcps": ["ASP.NET Core", "OpenTelemetry SDK", "EF Core", "database query logging"], "currentToolkitUse": ["AgentTool dotnet verify", "diagnostics skill", "performance-investigation skill"],
       "deterministicParts": "Build/test, route/model discovery, generated SQL and telemetry evidence.", "jevSuitableParts": "No fit for SQL, routes or traces.",
       "gptExpertValue": "Implement framework-correct security, lifetime and query patterns.", "rationale": "Domain guidance remains separately selected upstream."
     },
@@ -340,7 +340,7 @@
       "upstreamPaths": ["plugins/dotnet-ai/skills/technology-selection/SKILL.md", "plugins/dotnet11/skills/system-text-json-net11/SKILL.md"],
       "classification": "DO_NOT_INSTALL", "trigger": "Explicit .NET AI selection or .NET 11 System.Text.Json task.",
       "referenceLoading": "Prefer current official docs and separately selected upstream skill.", "staticCost": { "level": "high", "scope": "Two fast-moving skills plus seven AI references total about 36 KB." },
-      "toolsAndMcps": ["Microsoft.Extensions.AI", "Microsoft Agent Framework", "ML.NET", "ONNX Runtime", "System.Text.Json"], "currentToolkitUse": ["dependency-change skill", "dotnet-verify skill"],
+      "toolsAndMcps": ["Microsoft.Extensions.AI", "Microsoft Agent Framework", "ML.NET", "ONNX Runtime", "System.Text.Json"], "currentToolkitUse": ["AgentTool dotnet verify", "dependency-change skill"],
       "deterministicParts": "Inspect TFMs, package graph and compile/test evidence.", "jevSuitableParts": "Bounded technology choice after hard constraints and sanitization.",
       "gptExpertValue": "Compare fast-moving APIs and integration tradeoffs.", "rationale": "Volatility and narrow scope make default installation inappropriate."
     }

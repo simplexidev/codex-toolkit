@@ -55,10 +55,46 @@ public class DeterministicPrimitivesTests
         var build = JsonSerializer.SerializeToNode(await DotnetFacts.BuildPlan(repo.Root, "src/A.csproj", null, "Release", true), AgentTool.Json)!;
         Assert.Equal("restore", build["commands"]![0]!["arguments"]![0]!.GetValue<string>());
         Assert.Contains("-bl:.agent-tool/binlogs/", build["commands"]![1]!["arguments"]!.AsArray().Last()!.GetValue<string>(), StringComparison.Ordinal);
-        var test = JsonSerializer.SerializeToNode(await DotnetFacts.TestPlan(repo.Root, "src/A.csproj", null, "Release", "Category=Fast"), AgentTool.Json)!;
+        var test = JsonSerializer.SerializeToNode(await DotnetFacts.TestPlan(repo.Root, "src/A.csproj", null, "Release", new(null, null, null, "Category=Fast")), AgentTool.Json)!;
         Assert.Equal("vstest", test["tests"]![0]!["platform"]!.GetValue<string>());
         Assert.Contains("Category=Fast", test["tests"]![0]!["command"]!["arguments"]!.AsArray().Select(value => value!.GetValue<string>()));
         Assert.False(Directory.Exists(Path.Combine(repo.Root, ".agent-tool")));
+    }
+
+    [Fact]
+    public async Task TestPlanUsesNativeMtpShapeAndFrameworkSpecificSelection()
+    {
+        using var repo = new TemporaryGitRepository();
+        repo.Write("global.json", "{\"sdk\":{\"version\":\"10.0.100\",\"rollForward\":\"latestPatch\"},\"test\":{\"runner\":\"Microsoft.Testing.Platform\"}}");
+        repo.Write("tests/X.Tests.csproj", "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net10.0</TargetFramework><IsTestProject>true</IsTestProject><IsTestingPlatformApplication>true</IsTestingPlatformApplication></PropertyGroup><ItemGroup><PackageReference Include=\"xunit.v3\" Version=\"3.2.1\" /></ItemGroup></Project>");
+        var node = JsonSerializer.SerializeToNode(await DotnetFacts.TestPlan(repo.Root, "tests/X.Tests.csproj", null, "Debug", new("Ns.Type.Method", null, null, null)), AgentTool.Json)!;
+        var row = node["tests"]![0]!; var arguments = row["command"]!["arguments"]!.AsArray().Select(value => value!.GetValue<string>()).ToArray();
+        Assert.Equal("microsoft-testing-platform", row["platform"]!.GetValue<string>());
+        Assert.Equal("xunit-v3", row["framework"]!.GetValue<string>());
+        Assert.Equal("mtp-native", row["commandMode"]!.GetValue<string>());
+        Assert.Equal(new[] { "test", "--project", "tests/X.Tests.csproj" }, arguments.Take(3));
+        Assert.Contains("--filter-method", arguments); Assert.DoesNotContain("--", arguments);
+    }
+
+    [Fact]
+    public async Task TestPlanPlacesMtpBridgeArgumentsAfterSeparator()
+    {
+        using var repo = new TemporaryGitRepository();
+        repo.Write("tests/M.Tests.csproj", "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net10.0</TargetFramework><IsTestProject>true</IsTestProject><IsTestingPlatformApplication>true</IsTestingPlatformApplication><TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport><OutputType>Exe</OutputType></PropertyGroup><ItemGroup><PackageReference Include=\"MSTest.TestFramework\" Version=\"4.0.1\" /></ItemGroup></Project>");
+        var node = JsonSerializer.SerializeToNode(await DotnetFacts.TestPlan(repo.Root, "tests/M.Tests.csproj", null, "Debug", new(null, "Ns.Type", null, null)), AgentTool.Json)!;
+        var row = node["tests"]![0]!; var arguments = row["command"]!["arguments"]!.AsArray().Select(value => value!.GetValue<string>()).ToArray();
+        Assert.Equal("mtp-bridge", row["commandMode"]!.GetValue<string>());
+        Assert.True(Array.IndexOf(arguments, "--") < Array.IndexOf(arguments, "--filter"));
+        Assert.Contains("FullyQualifiedName~Ns.Type", arguments);
+    }
+
+    [Fact]
+    public async Task TestPlanRejectsAmbiguousRawMtpFilters()
+    {
+        using var repo = new TemporaryGitRepository();
+        repo.Write("global.json", "{\"sdk\":{\"version\":\"10.0.100\",\"rollForward\":\"latestPatch\"},\"test\":{\"runner\":\"Microsoft.Testing.Platform\"}}");
+        repo.Write("tests/T.Tests.csproj", "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net10.0</TargetFramework><IsTestProject>true</IsTestProject><IsTestingPlatformApplication>true</IsTestingPlatformApplication></PropertyGroup><ItemGroup><PackageReference Include=\"TUnit\" Version=\"1.0.0\" /></ItemGroup></Project>");
+        await Assert.ThrowsAsync<InvalidOperationException>(() => DotnetFacts.TestPlan(repo.Root, "tests/T.Tests.csproj", null, "Debug", new(null, null, null, "Name~Fast")));
     }
 
     [Fact]

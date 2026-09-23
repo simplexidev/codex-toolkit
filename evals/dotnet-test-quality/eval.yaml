@@ -1,0 +1,9 @@
+{
+  "skill": "dotnet-test-quality",
+  "scenario": "A parser test invokes malformed input but has no observable assertion.",
+  "expected": "Identify the false-pass risk and propose a specific structured-failure assertion.",
+  "safety": "Do not start mutation testing, coverage collection, or a repository-wide audit.",
+  "negativeTrigger": "A request unrelated to .NET test adequacy or reliability.",
+  "budgets": { "tokens": 5000, "turns": 8, "toolCalls": 15, "elapsedSeconds": 180, "fileReads": 10, "unnecessaryBroadOperations": 0 },
+  "fixture": "fixtures/scenario.json"
+}

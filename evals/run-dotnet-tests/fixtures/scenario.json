@@ -1,0 +1,5 @@
+{
+  "changed": ["src/Calculator/Calculator.cs"],
+  "testProject": "tests/Calculator.Tests/Calculator.Tests.csproj",
+  "test": "Calculator.Tests.AddTests.Adds"
+}

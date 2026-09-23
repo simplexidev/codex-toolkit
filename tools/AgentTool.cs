@@ -33,7 +33,8 @@ public static class AgentTool
         git state | summary [--base REF] | prepare-commit | issue-start --issue NUMBER --branch NAME
         github pr-status | review-comments --pr NUMBER | prepare-pr
         dotnet inspect [--project PATH] | build-plan [--base REF] [--project PATH] [--configuration NAME] [--binlog]
-        dotnet test-plan [--base REF] [--project PATH] [--configuration NAME] [--filter EXPR]
+        dotnet test-plan [--base REF] [--project PATH] [--configuration NAME]
+            [--test NAME | --class NAME | --category NAME | --filter EXPR]
         dotnet diagnostics-plan [--process-id NUMBER]
         dotnet verify [--base REF] [--project PATH] | format --project PATH [--apply]
         dotnet dependencies --project PATH | package-audit --project PATH | api-check --project PATH | release-verify --project PATH
@@ -152,7 +153,7 @@ public static class AgentTool
                 return await Dotnet(command, c, root, artifacts, settings);
             case "dotnet inspect": return Result.Ok(await DotnetFacts.Inspect(root, c.Get("project")));
             case "dotnet build-plan": return Result.Ok(await DotnetFacts.BuildPlan(root, c.Get("project"), c.Get("base"), c.Get("configuration") ?? "Debug", c.Flag("binlog")));
-            case "dotnet test-plan": return Result.Ok(await DotnetFacts.TestPlan(root, c.Get("project"), c.Get("base"), c.Get("configuration") ?? "Debug", c.Get("filter")));
+            case "dotnet test-plan": return Result.Ok(await DotnetFacts.TestPlan(root, c.Get("project"), c.Get("base"), c.Get("configuration") ?? "Debug", new(c.Get("test"), c.Get("class"), c.Get("category"), c.Get("filter"))));
             case "dotnet diagnostics-plan": return Result.Ok(DotnetFacts.DiagnosticsPlan(c.Get("process-id")));
             case "logs summarize":
                 return Result.Ok(Output.SummarizeFile(c.Require("file"), settings.Output));
@@ -377,7 +378,7 @@ public sealed class Cli
             "dotnet verify" => ["base", "project"],
             "dotnet inspect" => ["project"],
             "dotnet build-plan" => ["base", "project", "configuration", "binlog"],
-            "dotnet test-plan" => ["base", "project", "configuration", "filter"],
+            "dotnet test-plan" => ["base", "project", "configuration", "test", "class", "category", "filter"],
             "dotnet diagnostics-plan" => ["process-id"],
             "dotnet format" => ["base", "project", "apply"],
             "dotnet dependencies" or "dotnet package-audit" or "dotnet api-check" or "dotnet release-verify" => ["project"],
@@ -396,7 +397,7 @@ public sealed class Cli
     public List<string> Words { get; } = [];
     public Dictionary<string, string?> Options { get; } = new(StringComparer.Ordinal);
     static readonly HashSet<string> Flags = ["json", "help", "dry-run", "bin", "apply", "safe-input", "binlog"];
-    static readonly HashSet<string> Values = ["root", "toolkit", "home", "codex-home", "base", "query", "issue", "branch", "pr", "project", "file", "input", "output", "skill", "results", "configuration", "filter", "process-id"];
+    static readonly HashSet<string> Values = ["root", "toolkit", "home", "codex-home", "base", "query", "issue", "branch", "pr", "project", "file", "input", "output", "skill", "results", "configuration", "test", "class", "category", "filter", "process-id"];
     public string? Get(string name) => Options.GetValueOrDefault(name);
     public bool Flag(string name) => Options.ContainsKey(name);
     public string Require(string name) => Get(name) is { Length: > 0 } v ? v : throw new ArgumentException($"--{name} is required.");
@@ -659,7 +660,7 @@ public static class Projects
     }
     public static async Task<JsonNode> Evaluate(string root, string project)
     {
-        var result = await Processes.Run("dotnet", ["msbuild", project, "-nologo", "-getProperty:TargetFramework,TargetFrameworks,IsTestProject,Nullable,ManagePackageVersionsCentrally,Deterministic,EnableNETAnalyzers,RestorePackagesWithLockFile,EnablePackageValidation,PackageValidationBaselineVersion,IsTestingPlatformApplication,TestingPlatformDotnetTestSupport,UseMicrosoftTestingPlatformRunner", "-getItem:ProjectReference,Compile,PackageReference"], root);
+        var result = await Processes.Run("dotnet", ["msbuild", project, "-nologo", "-getProperty:TargetFramework,TargetFrameworks,OutputType,IsTestProject,Nullable,ManagePackageVersionsCentrally,Deterministic,EnableNETAnalyzers,RestorePackagesWithLockFile,EnablePackageValidation,PackageValidationBaselineVersion,IsTestingPlatformApplication,TestingPlatformDotnetTestSupport,UseMicrosoftTestingPlatformRunner", "-getItem:ProjectReference,Compile,PackageReference"], root);
         if (result.ExitCode != 0) throw new InvalidOperationException($"MSBuild evaluation failed for {Path.GetFileName(project)}; graph cannot safely be narrowed.");
         return JsonNode.Parse(result.Output) ?? throw new InvalidOperationException("Empty MSBuild response.");
     }
@@ -777,8 +778,8 @@ public static class DotnetFacts
             var targetFrameworks = Frameworks(properties).ToArray();
             var references = items?["ProjectReference"]?.AsArray().Select(item => item?["FullPath"]?.GetValue<string>()).OfType<string>().Select(path => Rel(root, path)).Order(StringComparer.Ordinal).ToArray() ?? [];
             var packages = items?["PackageReference"]?.AsArray().Select(item => new { id = item?["Identity"]?.GetValue<string>(), version = ItemValue(item, "Version") }).OrderBy(item => item.id, StringComparer.Ordinal).ToArray() ?? [];
-            var platform = TestPlatform(properties, packages.Select(package => package.id).OfType<string>());
-            rows.Add(new { path = Rel(root, project), language = Path.GetExtension(project) switch { ".fsproj" => "F#", ".vbproj" => "Visual Basic", _ => "C#" }, targetFrameworks, isTest = IsTrue(properties["IsTestProject"]), testPlatform = platform, projectReferences = references, packageReferences = packages });
+            var profile = TestProfileFor(root, properties, packages.Select(package => package.id).OfType<string>());
+            rows.Add(new { path = Rel(root, project), language = Path.GetExtension(project) switch { ".fsproj" => "F#", ".vbproj" => "Visual Basic", _ => "C#" }, targetFrameworks, isTest = IsTrue(properties["IsTestProject"]), testPlatform = profile.Platform, testFramework = profile.Framework, testCommandMode = profile.CommandMode, projectReferences = references, packageReferences = packages });
             edges.AddRange(references.Select(reference => new { from = Rel(root, project), to = reference }));
         }
         JsonNode? globalJson = null; var globalJsonPath = Path.Combine(root, "global.json"); if (File.Exists(globalJsonPath)) globalJson = JsonNode.Parse(File.ReadAllText(globalJsonPath));
@@ -808,15 +809,15 @@ public static class DotnetFacts
         return new { schemaVersion = 1, kind = "dotnet-build-plan", configuration, baseRef, targets = targets.Select(target => Rel(root, target)), selection = explicitProject is null ? affected!.Reason : "Explicit project or solution.", commands, artifacts = binlog ? new { binlogs = ".agent-tool/binlogs/*.binlog", retention = "Large binary artifacts stay outside model context; summarize separately." } : null };
     }
 
-    public static async Task<object> TestPlan(string root, string? explicitProject, string? baseRef, string configuration, string? filter)
+    public static async Task<object> TestPlan(string root, string? explicitProject, string? baseRef, string configuration, TestSelection requested)
     {
-        ValidateConfiguration(configuration); root = Path.GetFullPath(root); if (filter is { Length: > 4096 }) throw new ArgumentException("Test filter exceeds 4096 characters.");
-        string[] tests; string selection;
+        ValidateConfiguration(configuration); root = Path.GetFullPath(root); requested.Validate();
+        string[] tests; string scope;
         if (explicitProject is null)
         {
             var affected = await Projects.Affected(root, await Git.Changed(root, baseRef));
             var selected = new List<string>(); foreach (var project in affected.Projects) if (await Projects.IsTest(root, project)) selected.Add(project);
-            tests = selected.Order(StringComparer.Ordinal).ToArray(); selection = affected.Reason;
+            tests = selected.Order(StringComparer.Ordinal).ToArray(); scope = affected.Reason;
         }
         else
         {
@@ -827,16 +828,54 @@ public static class DotnetFacts
             }
             else if (await Projects.IsTest(root, target)) tests = [target];
             else tests = await Projects.DependentTests(root, target);
-            selection = "Explicit target and its transitive dependent test projects.";
+            scope = "Explicit target and its transitive dependent test projects.";
         }
         var rows = new List<object>();
         foreach (var test in tests)
         {
             var evaluation = await Projects.Evaluate(root, test); var packages = evaluation["Items"]?["PackageReference"]?.AsArray().Select(item => item?["Identity"]?.GetValue<string>()).OfType<string>() ?? [];
-            var args = new List<string> { "test", Rel(root, test), "--configuration", configuration, "--nologo", "--logger", "trx", "--results-directory", ".agent-tool/test-results" }; if (filter is not null) { args.Add("--filter"); args.Add(filter); }
-            rows.Add(new { project = Rel(root, test), platform = TestPlatform(evaluation["Properties"]!, packages), targetFrameworks = Frameworks(evaluation["Properties"]!).ToArray(), command = Command(args) });
+            var profile = TestProfileFor(root, evaluation["Properties"]!, packages);
+            var args = TestCommand(Rel(root, test), configuration, profile, requested);
+            rows.Add(new { project = Rel(root, test), platform = profile.Platform, framework = profile.Framework, commandMode = profile.CommandMode, targetFrameworks = Frameworks(evaluation["Properties"]!).ToArray(), command = Command(args) });
         }
-        return new { schemaVersion = 1, kind = "dotnet-test-plan", configuration, filter, selection, tests = rows, artifacts = new { results = ".agent-tool/test-results/*.trx", coverage = ".agent-tool/test-results/**/coverage.*.xml" } };
+        return new { schemaVersion = 1, kind = "dotnet-test-plan", configuration, filter = requested.Filter, selection = scope, requestedSelection = requested, tests = rows, artifacts = new { results = ".agent-tool/test-results/**/*.trx", coverage = ".agent-tool/test-results/**/coverage.*.xml" } };
+    }
+
+    static string[] TestCommand(string project, string configuration, TestProfile profile, TestSelection selection)
+    {
+        if (profile.Platform is not ("vstest" or "microsoft-testing-platform"))
+            throw new InvalidOperationException($"{project} has no recognized test platform. Load the test-platform edge-case reference; do not guess a command.");
+        if (profile.Platform == "microsoft-testing-platform" && profile.CommandMode == "unconfigured")
+            throw new InvalidOperationException($"{project} uses Microsoft.Testing.Platform but has neither SDK 10 native mode nor an executable VSTest bridge. Load the test-platform edge-case reference; do not guess a command.");
+        var args = new List<string> { "test" };
+        if (profile.CommandMode == "mtp-native") { args.Add("--project"); args.Add(project); }
+        else args.Add(project);
+        args.Add("--configuration"); args.Add(configuration); args.Add("--nologo");
+
+        var runner = new List<string>();
+        if (profile.Platform == "vstest") { runner.Add("--logger"); runner.Add("trx"); runner.Add("--results-directory"); runner.Add(".agent-tool/test-results"); }
+        else { runner.Add("--report-trx"); runner.Add("--results-directory"); runner.Add(".agent-tool/test-results"); }
+        runner.AddRange(FilterArguments(profile, selection));
+        if (profile.CommandMode == "mtp-bridge") args.Add("--");
+        args.AddRange(runner);
+        return args.ToArray();
+    }
+
+    static string[] FilterArguments(TestProfile profile, TestSelection selection)
+    {
+        var value = selection.Value; if (value is null) return [];
+        if (selection.Filter is not null)
+        {
+            if (profile.Platform == "microsoft-testing-platform" && profile.Framework is "xunit-v3" or "tunit" or "unknown")
+                throw new InvalidOperationException($"Raw --filter is not portable to {profile.Framework} on Microsoft.Testing.Platform. Use --test, --class, or --category, or load the test-platform edge-case reference.");
+            return ["--filter", value];
+        }
+        if (profile.Platform == "microsoft-testing-platform" && profile.Framework == "xunit-v3")
+            return selection.Test is not null ? ["--filter-method", value] : selection.Class is not null ? ["--filter-class", value] : ["--filter-trait", $"Category={value}"];
+        if (profile.Platform == "microsoft-testing-platform" && profile.Framework == "tunit")
+            return ["--treenode-filter", selection.Test is not null ? $"/*/*/*/{value}" : selection.Class is not null ? $"/*/*/{value}/*" : $"/*/*/*/*[Category={value}]"];
+        var expression = selection.Test is not null ? $"FullyQualifiedName={value}" : selection.Class is not null ? $"FullyQualifiedName~{value}" : $"TestCategory={value}";
+        return ["--filter", expression];
     }
 
     public static object DiagnosticsPlan(string? processId)
@@ -873,12 +912,42 @@ public static class DotnetFacts
     static IEnumerable<string> Frameworks(JsonNode properties) => (properties["TargetFrameworks"]?.GetValue<string>() is { Length: > 0 } frameworks ? frameworks : properties["TargetFramework"]?.GetValue<string>() ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
     static string[] Lines(ProcessResult result) => result.ExitCode == 0 ? result.Output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) : [];
     static string? ItemValue(JsonNode? item, string name) => item?[name]?.GetValue<string>() ?? item?["Metadata"]?[name]?.GetValue<string>();
-    static string TestPlatform(JsonNode properties, IEnumerable<string> packages)
+    static TestProfile TestProfileFor(string root, JsonNode properties, IEnumerable<string> packages)
     {
         var names = packages.ToHashSet(StringComparer.OrdinalIgnoreCase);
-        if (IsTrue(properties["IsTestingPlatformApplication"]) || IsTrue(properties["UseMicrosoftTestingPlatformRunner"]) || names.Contains("Microsoft.Testing.Platform") || names.Contains("MSTest.Sdk")) return "microsoft-testing-platform";
-        if (names.Contains("Microsoft.NET.Test.Sdk")) return "vstest";
-        return IsTrue(properties["IsTestProject"]) ? "unknown" : "not-test-project";
+        var framework = names.Any(name => name.Equals("TUnit", StringComparison.OrdinalIgnoreCase) || name.StartsWith("TUnit.", StringComparison.OrdinalIgnoreCase)) ? "tunit"
+            : names.Any(name => name.Equals("xunit.v3", StringComparison.OrdinalIgnoreCase) || name.StartsWith("xunit.v3.", StringComparison.OrdinalIgnoreCase)) ? "xunit-v3"
+            : names.Any(name => name.Equals("xunit", StringComparison.OrdinalIgnoreCase) || name.StartsWith("xunit.", StringComparison.OrdinalIgnoreCase)) ? "xunit-v2"
+            : names.Any(name => name.Equals("NUnit", StringComparison.OrdinalIgnoreCase) || name.StartsWith("NUnit.", StringComparison.OrdinalIgnoreCase)) ? "nunit"
+            : names.Any(name => name.Equals("MSTest", StringComparison.OrdinalIgnoreCase) || name.StartsWith("MSTest.", StringComparison.OrdinalIgnoreCase)) ? "mstest" : "unknown";
+        var mtp = IsTrue(properties["IsTestingPlatformApplication"]) || IsTrue(properties["UseMicrosoftTestingPlatformRunner"]) || names.Contains("Microsoft.Testing.Platform") || names.Contains("MSTest.Sdk") || framework == "tunit";
+        if (!mtp) return new(IsTrue(properties["IsTestProject"]) && names.Contains("Microsoft.NET.Test.Sdk") ? "vstest" : IsTrue(properties["IsTestProject"]) ? "unknown" : "not-test-project", framework, "vstest");
+        var native = GlobalUsesNativeMtp(root);
+        var bridge = IsTrue(properties["TestingPlatformDotnetTestSupport"]) && string.Equals(properties["OutputType"]?.GetValue<string>(), "Exe", StringComparison.OrdinalIgnoreCase);
+        return new("microsoft-testing-platform", framework, native ? "mtp-native" : bridge ? "mtp-bridge" : "unconfigured");
+    }
+
+    static bool GlobalUsesNativeMtp(string root)
+    {
+        var path = Path.Combine(root, "global.json"); if (!File.Exists(path)) return false;
+        var global = JsonNode.Parse(File.ReadAllText(path));
+        var runner = global?["test"]?["runner"]?.GetValue<string>();
+        var version = global?["sdk"]?["version"]?.GetValue<string>();
+        return runner?.Equals("Microsoft.Testing.Platform", StringComparison.OrdinalIgnoreCase) == true
+            && Version.TryParse(version?.Split('-')[0], out var sdk) && sdk.Major >= 10;
+    }
+}
+
+public record TestProfile(string Platform, string Framework, string CommandMode);
+public record TestSelection(string? Test, string? Class, string? Category, string? Filter)
+{
+    public string? Value => Test ?? Class ?? Category ?? Filter;
+    public void Validate()
+    {
+        var values = new[] { Test, Class, Category, Filter }.Where(value => value is not null).ToArray();
+        if (values.Length > 1) throw new ArgumentException("Use only one of --test, --class, --category, or --filter.");
+        if (values.Length == 0) return;
+        if (string.IsNullOrWhiteSpace(values[0]) || values[0]!.Length > 4096 || values[0]!.Any(char.IsControl)) throw new ArgumentException("Test selection must be 1-4096 printable characters.");
     }
 }
 

@@ -1,6 +1,0 @@
-interface:
-  display_name: "Test Quality"
-  short_description: Assess targeted .NET test coverage, assertions or optional mutation testing.
-  default_prompt: "Use $test-quality."
-policy:
-  allow_implicit_invocation: true
