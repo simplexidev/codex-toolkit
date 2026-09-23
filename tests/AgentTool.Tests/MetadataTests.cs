@@ -54,6 +54,36 @@ public class MetadataTests
         Assert.True(File.Exists(Path.Combine(Root, "plugins/codex-toolkit/references/v2-baseline.md")));
     }
     [Fact]
+    public void CapabilityManifestIsCompleteConsistentAndMetricsReady()
+    {
+        var manifest = JsonNode.Parse(File.ReadAllText(Path.Combine(Root, "config/capabilities.json")))!;
+        var capabilities = manifest["capabilities"]!.AsArray();
+        var ids = capabilities.Select(x => x!["id"]!.GetValue<string>()).ToArray();
+        Assert.Equal(31, capabilities.Count);
+        Assert.Equal(ids.Length, ids.Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(capabilities.Count, manifest["summary"]!["total"]!.GetValue<int>());
+        foreach (var coverage in new[] { "supported", "partial", "gap" })
+            Assert.Equal(capabilities.Count(x => x!["coverage"]!.GetValue<string>() == coverage), manifest["summary"]![coverage]!.GetValue<int>());
+        foreach (var required in new[]
+        {
+            "repo-navigation-impact", "git-local-state", "github-issues", "github-pull-requests", "github-reviews", "github-actions", "github-releases",
+            "planning", "scoped-edits-refactors", "migrations", "dotnet-csharp", "tests", "msbuild", "diagnostics", "dependencies", "vulnerabilities",
+            "licenses", "security-sarif", "docs-impact", "architecture", "api-compatibility", "benchmarks", "packaging", "reproducibility", "sbom", "ci",
+            "release-integrity", "generated-dead-files", "merge-conflict-prep", "upstream-maintenance", "agent-skill-maintenance"
+        }) Assert.Contains(required, ids);
+        Assert.All(capabilities, capability =>
+        {
+            Assert.NotEmpty(capability!["existingSupport"]!.AsArray());
+            Assert.NotNull(capability["opportunities"]!["deterministic"]);
+            Assert.NotNull(capability["opportunities"]!["jev"]);
+            Assert.NotNull(capability["opportunities"]!["agent"]);
+            Assert.NotNull(capability["routing"]!["primary"]);
+            Assert.NotNull(capability["staticCost"]!["level"]);
+            Assert.NotNull(capability["recommendedAction"]);
+        });
+        Assert.True(File.Exists(Path.Combine(Root, "plugins/codex-toolkit/references/capability-coverage.md")));
+    }
+    [Fact]
     public async Task ReleaseArchiveContainsUserFacingMetadataAndExcludesDevelopmentState()
     {
         using var repo = new TemporaryGitRepository(); var archive = Path.Combine(repo.Root, "codex-toolkit.zip");

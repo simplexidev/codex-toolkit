@@ -2,6 +2,9 @@
 
 This compact runtime reference anchors the v2 integration line at the `v1.0.0`
 release. The machine-readable ownership contract is `config/ecosystem.json`.
+Routing and metrics consumers use the versioned capability inventory in
+`config/capabilities.json`; the compact audit interpretation is
+`references/capability-coverage.md`.
 
 ## Ecosystem boundary
 
