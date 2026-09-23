@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Adds bounded GitHub Actions run/job/failed-log inspection with one compact CI
+  triage skill, while keeping reruns and workflow mutations caller-controlled.
+- Adds non-merging conflict forecasts, SARIF baseline diffs, ZIP safety/content
+  inspection, exact SHA-256 verification, and evidence-backed hygiene candidates.
+- Consolidates the new evidence into existing PR, security, release, and repository
+  health skills instead of adding overlapping workflow skills.
 - Adds versioned AgentTool contracts for bounded repository/change summaries, file
   ownership and impact, .NET environment/project inspection, resolved dependencies,
   and non-executing build, test, binlog, and diagnostics plans.

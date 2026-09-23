@@ -7,8 +7,8 @@ human product manual. The source of record is the versioned
 
 ## Audit result
 
-The audit inventories 31 common repository/workspace capability areas: 10 are
-supported, 17 are partial, and 4 are gaps. Coverage means the toolkit has the
+The audit inventories 31 common repository/workspace capability areas: 12 are
+supported, 18 are partial, and 1 is a gap. Coverage means the toolkit has the
 correct routing and a useful workflow; it does not imply every platform mutation
 is automated. Commit, push, PR merge, publication, external tool installation,
 and destructive cleanup remain authority boundaries.
@@ -28,25 +28,20 @@ complete at its pinned SHA but remains lazy routing metadata, not default contex
 | Area | Finding | Engineering direction |
 | --- | --- | --- |
 | Repository, Git, .NET, tests | Strong structured core | Keep exact discovery and validation in AgentTool; use skills for narrow workflow policy. |
-| GitHub | PR/review basics exist; Actions run diagnostics are absent | Add one bounded read-only run/job/log surface before a consolidated CI-triage skill. |
-| Supply chain | Vulnerability checks exist; license compliance and package inspection do not | Define machine-readable policies and artifact schemas before skill instructions. |
-| Build/release | Broad release checks exist; reproducibility, SBOM and remote asset verification remain separate | Emit composable evidence and eventually a release attestation rather than a monolithic command. |
+| GitHub | PR/review and bounded Actions run/job/failed-log diagnosis exist | Keep platform mutations caller-controlled and measure whether remote artifact retrieval is needed. |
+| Supply chain | Vulnerability checks and generic ZIP inspection exist; resolved license compliance and package-specific metadata do not | Define machine-readable license policies before compliance guidance and add package rules only from stable schemas. |
+| Build/release | Broad release checks plus local artifact inspection/hash verification exist; reproducibility, SBOM and remote retrieval remain separate | Emit composable evidence and eventually a release attestation rather than a monolithic command. |
 | Maintenance | Upstream and plugin lifecycle are bounded and conservative | Move evaluation ownership to metrics in its own phase; let metrics ingest this manifest. |
-| Repository hygiene | Known reference checks exist; generated/dead-file analysis is absent | Produce evidence-backed read-only candidates first; never auto-delete. |
+| Repository hygiene | Tracked generated/output candidates are evidence-backed; reachability remains ecosystem-specific | Add graph-based orphan analysis only where exact consumers are available; never auto-delete. |
 
 ## Recommended sequence
 
-1. Add deterministic GitHub Actions run/job/failed-log inspection with strict
-   output bounds and sanitized fixtures. Reuse `logs summarize`; add at most one
-   CI-triage skill after measured need.
-2. Define resolved dependency license and artifact/package schemas. Implement
-   inventory and policy facts before adding any compliance workflow guidance.
-3. Add non-mutating Git conflict forecasting and SARIF baseline/diff output to
-   existing command families.
-4. Add opt-in reproducibility and remote release-asset verification, then compose
+1. Define resolved dependency license policy and inventory schemas before adding
+   any compliance workflow guidance; license ambiguity remains the sole gap.
+2. Add opt-in reproducibility and remote release-asset verification, then compose
    their results into a machine-readable release attestation.
-5. Add generated/orphan candidate reporting only when provenance and reachability
-   evidence can be explained per item.
+3. Add ecosystem-specific generated/orphan reachability only when provenance and
+   consumer evidence can be explained per item.
 
 The testing optimization adds four narrow skills because measured upstream testing
 context did not improve baseline correctness and materially increased cost. Their
@@ -68,3 +63,10 @@ plans; and bounded TRX, JUnit, Cobertura and OpenCover summaries.
 `config/agent-tool-contracts.json` is the compact source
 for metrics consumers. Plans expose executable argument arrays but do not cross
 the existing mutation or sensitive diagnostics-collection boundaries.
+
+The general-capability expansion adds bounded GitHub Actions run/job/failed-log
+inspection, merge-tree conflict forecasts, SARIF baseline diffs, ZIP safety and
+SHA-256 evidence, and tracked hygiene candidates. These commands do not rerun
+jobs, merge branches, extract archives or delete candidates. A single compact
+`ci-triage` skill is the only new routing surface; release, security, PR and
+repository-health workflows reuse their existing skills.

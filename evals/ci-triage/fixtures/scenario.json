@@ -1,0 +1,9 @@
+{
+  "runId": 4242,
+  "status": "completed",
+  "conclusion": "failure",
+  "jobs": [
+    { "name": "test", "conclusion": "failure", "failedStep": "Run tests" },
+    { "name": "package", "conclusion": "cancelled" }
+  ]
+}

@@ -4,7 +4,7 @@
   "owner": "simplexidev/codex-toolkit",
   "generatedFrom": "develop/v2.0.0 capability audit",
   "layerOrder": ["deterministic", "jev", "agent", "stronger-agent"],
-  "summary": { "total": 31, "supported": 10, "partial": 17, "gap": 4 },
+  "summary": { "total": 31, "supported": 12, "partial": 18, "gap": 1 },
   "capabilities": [
     {
       "id": "repo-navigation-impact",
@@ -98,17 +98,18 @@
       "id": "github-actions",
       "title": "GitHub Actions and run diagnostics",
       "tasks": ["inspect workflow runs", "summarize failed jobs", "retrieve bounded logs", "rerun authorized jobs"],
-      "coverage": "gap",
+      "coverage": "supported",
       "existingSupport": [
-        { "kind": "agent-tool", "id": "github pr-status", "scope": "Shows PR check rollups but not run or job detail." },
-        { "kind": "agent-tool", "id": "logs summarize", "scope": "Compacts a caller-provided local log." }
+        { "kind": "agent-tool", "id": "github actions", "scope": "Lists runs, normalizes job and failed-step detail, and retrieves bounded failed logs." },
+        { "kind": "skill", "id": "ci-triage", "scope": "Diagnoses the earliest causal failure without assuming rerun authority or flakiness." },
+        { "kind": "agent-tool", "id": "logs summarize", "scope": "Compacts retrieved failed logs." }
       ],
       "opportunities": { "deterministic": "Add read-only run, job and failed-log normalization with strict bounds.", "jev": "No fit until deterministic failure excerpts leave a large ambiguous set.", "agent": "Diagnose the first causal failure and decide whether a rerun is justified." },
       "routing": { "primary": "deterministic", "fallback": ["agent"], "reason": "Run state and logs should be fetched and bounded before diagnosis." },
-      "staticCost": { "level": "none", "activation": "none", "loads": [], "concern": "Do not add always-loaded Actions instructions." },
-      "gaps": ["No run/job/artifact/log inspection command.", "No scoped rerun workflow."],
+      "staticCost": { "level": "low", "activation": "implicit", "loads": ["ci-triage"], "concern": "Activate only for GitHub Actions failures; do not load for ordinary local build failures." },
+      "gaps": ["Artifact download and rerun mutations remain caller-controlled."],
       "duplication": ["Generic log summarization can be reused after retrieval."],
-      "recommendedAction": "Prioritize a consolidated github runs command and one CI-triage skill after fixtures define bounds."
+      "recommendedAction": "Keep one consolidated Actions command and measure whether artifact inspection needs remote download support."
     },
     {
       "id": "github-releases",
@@ -317,7 +318,7 @@
       "tasks": ["run analyzers", "summarize SARIF", "triage findings", "validate fixes"],
       "coverage": "supported",
       "existingSupport": [
-        { "kind": "agent-tool", "id": "sarif summarize", "scope": "Bounded rule, severity and location summary." },
+        { "kind": "agent-tool", "id": "sarif summarize", "scope": "Bounded rule, severity, location and suppression summary with optional baseline diff." },
         { "kind": "skill", "id": "security-scan", "scope": "Coordinates configured analyzers and evidence-backed triage." },
         { "kind": "workflow", "id": "codeql.yml", "scope": "C# CodeQL on public repositories and explicit private fallback." },
         { "kind": "upstream", "id": "DevSkim", "scope": "On-demand security rules and SARIF." }
@@ -325,9 +326,9 @@
       "opportunities": { "deterministic": "Preserve rule IDs, severity, suppression and locations.", "jev": "Never downgrade hard findings; optional clustering only after sanitization.", "agent": "Validate exploitability and fix against the originating rule." },
       "routing": { "primary": "deterministic", "fallback": ["agent", "stronger-agent"], "reason": "Analyzer facts precede security reasoning." },
       "staticCost": { "level": "low", "activation": "implicit", "loads": ["security-scan"], "concern": "Load only for security requests or relevant findings." },
-      "gaps": ["No SARIF baseline/diff command.", "Configured analyzer execution remains project-specific."],
+      "gaps": ["Configured analyzer execution remains project-specific."],
       "duplication": ["package audit feeds security-scan but remains a distinct advisory source."],
-      "recommendedAction": "Add deterministic SARIF diffing before any semantic triage expansion."
+      "recommendedAction": "Retain deterministic baseline diffing and keep semantic triage scoped to new evidence."
     },
     {
       "id": "docs-impact",
@@ -399,17 +400,18 @@
       "id": "packaging",
       "title": "Package and artifact construction",
       "tasks": ["pack .NET artifacts", "inspect package contents", "validate metadata"],
-      "coverage": "gap",
+      "coverage": "partial",
       "existingSupport": [
         { "kind": "agent-tool", "id": "release", "scope": "Builds the toolkit source ZIP only." },
-        { "kind": "agent-tool", "id": "dotnet release-verify", "scope": "Runs broad project checks but does not pack or inspect packages." }
+        { "kind": "agent-tool", "id": "artifact inspect", "scope": "Hashes files and inventories ZIP contents with traversal, duplicate, link and expansion-risk checks." },
+        { "kind": "agent-tool", "id": "dotnet release-verify", "scope": "Runs broad project checks but does not pack packages." }
       ],
       "opportunities": { "deterministic": "Pack into a temporary drop and inspect archive paths, metadata, symbols and provenance.", "jev": "No fit for package contents.", "agent": "Interpret project-specific packaging intent." },
       "routing": { "primary": "deterministic", "fallback": ["agent"], "reason": "Package contents and metadata are exact artifacts." },
       "staticCost": { "level": "none", "activation": "none", "loads": [], "concern": "Avoid a package skill until one workflow spans recurring package types." },
-      "gaps": ["No dotnet pack workflow.", "No NuGet/artifact content inspection."],
+      "gaps": ["No generic pack workflow or package-type-specific metadata validation."],
       "duplication": ["Release verification names packaging-adjacent gates but does not implement them."],
-      "recommendedAction": "Define one artifact-inspection command before a consolidated packaging skill."
+      "recommendedAction": "Extend artifact inspection only when a recurring package format supplies stable metadata rules."
     },
     {
       "id": "reproducibility",
@@ -471,12 +473,13 @@
         { "kind": "agent-tool", "id": "dotnet release-verify", "scope": "Restore, build, format, test and audit gate." },
         { "kind": "skill", "id": "release-verify", "scope": "Requires explicit reporting of executed, skipped and blocked gates." },
         { "kind": "skill", "id": "versioning", "scope": "Applies existing Git-derived version policy." },
+        { "kind": "agent-tool", "id": "artifact verify", "scope": "Compares local artifact bytes with a trusted SHA-256 checksum." },
         { "kind": "workflow", "id": "release.yml", "scope": "Checks tag identity and emits archive plus SHA-256 checksum." }
       ],
       "opportunities": { "deterministic": "Emit one release attestation of gates, identities and hashes.", "jev": "No fit for release integrity.", "agent": "Assess intentional exceptions and authorize publication." },
       "routing": { "primary": "deterministic", "fallback": ["agent"], "reason": "Every integrity claim must point to a gate or artifact fact." },
       "staticCost": { "level": "medium", "activation": "explicit", "loads": ["release-verify", "versioning"], "concern": "Load only at release or explicit complete-validation time." },
-      "gaps": ["API, SBOM, packaging and reproducibility remain separate optional gates.", "No signed provenance or remote asset verification."],
+      "gaps": ["API, SBOM, packaging and reproducibility remain separate optional gates.", "No signed provenance or remote asset download verification."],
       "duplication": ["The broad command composes existing checks and explicitly reports separate gates."],
       "recommendedAction": "Define a machine-readable release attestation instead of expanding one monolithic command."
     },
@@ -484,34 +487,35 @@
       "id": "generated-dead-files",
       "title": "Generated, stale and dead files",
       "tasks": ["identify generated outputs", "detect orphaned files", "find dead source or config"],
-      "coverage": "gap",
+      "coverage": "partial",
       "existingSupport": [
-        { "kind": "agent-tool", "id": "repo locate", "scope": "Finds candidate paths only." },
+        { "kind": "agent-tool", "id": "repo hygiene", "scope": "Reports bounded tracked output, temporary and generated-marker candidates with explicit evidence and no deletion." },
         { "kind": "agent-tool", "id": "validate", "scope": "Detects known metadata/reference inconsistencies, not general dead files." }
       ],
       "opportunities": { "deterministic": "Combine ignore rules, project inclusion, generated markers, references and known generators.", "jev": "Screen only ambiguous sanitized orphan candidates after exact reachability checks.", "agent": "Confirm intent before deletion and handle reflection/convention risks." },
       "routing": { "primary": "deterministic", "fallback": ["jev", "agent"], "reason": "Candidate generation must be explainable; deletion needs contextual confirmation." },
       "staticCost": { "level": "none", "activation": "none", "loads": [], "concern": "A broad dead-code skill would encourage expensive repository scans." },
-      "gaps": ["No generated-file provenance inventory.", "No dead-file or orphan reachability command."],
+      "gaps": ["No generator provenance graph or dead-file/orphan reachability analysis."],
       "duplication": ["Validation contains narrow orphan checks that should remain product-specific."],
-      "recommendedAction": "First add a read-only candidate report with evidence and zero deletion behavior."
+      "recommendedAction": "Add reachability analyzers only for explicit language or build-system graphs; never generalize marker evidence into deletion authority."
     },
     {
       "id": "merge-conflict-prep",
       "title": "Merge and conflict preparation",
       "tasks": ["estimate conflicts", "prepare integration", "detect unfinished operations", "resolve conflicts safely"],
-      "coverage": "partial",
+      "coverage": "supported",
       "existingSupport": [
         { "kind": "agent-tool", "id": "git state", "scope": "Detects merge, rebase, cherry-pick and revert state." },
+        { "kind": "agent-tool", "id": "git conflict-forecast", "scope": "Uses merge-tree to report conflicts without changing refs, index or worktree." },
         { "kind": "skill", "id": "prepare-commit", "scope": "Refuses unsafe commit preparation." },
         { "kind": "agent", "id": "Codex", "scope": "Inspects bases and resolves authorized conflicts." }
       ],
       "opportunities": { "deterministic": "Compute merge bases, touched-path intersections and merge-tree results without mutation.", "jev": "No fit for Git conflict facts.", "agent": "Resolve semantic conflicts with tests and user intent." },
       "routing": { "primary": "deterministic", "fallback": ["agent", "stronger-agent"], "reason": "Non-mutating conflict prediction narrows semantic resolution." },
       "staticCost": { "level": "none", "activation": "none", "loads": [], "concern": "Conflict guidance should load only after a conflict or explicit preparation request." },
-      "gaps": ["No merge-tree/conflict forecast command.", "No dedicated resolution skill."],
+      "gaps": ["Conflict resolution remains repository-specific agent reasoning by design."],
       "duplication": ["Git safety checks already protect unfinished operations."],
-      "recommendedAction": "Add a read-only conflict forecast to the Git command family; keep resolution in agent reasoning."
+      "recommendedAction": "Keep forecast facts deterministic and conflict resolution in scoped agent reasoning."
     },
     {
       "id": "upstream-maintenance",

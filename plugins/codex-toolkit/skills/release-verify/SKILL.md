@@ -5,4 +5,4 @@ description: Run explicitly requested release or complete .NET validation.
 
 # Release Verify
 
-Use `dotnet release-verify --project PATH` for restore, build, format verification, detected tests and audit. Add project-configured package validation/API baselines, reproducibility checks and SBOM separately; the utility does not certify absent gates. Release verification is intentionally broader than ordinary change validation. Preserve reports and list every executed, skipped or blocked gate.
+Use the project's configured release checks; for .NET, `dotnet release-verify --project PATH` covers restore, build, formatting, detected tests and audit. Inspect the produced archive with `artifact inspect --file PATH`, then use `artifact verify --file PATH --sha256 HEX` against a trusted checksum. Add configured API baselines, reproducibility and SBOM checks separately—the workflow does not certify absent gates. Preserve reports and list every executed, skipped or blocked gate.
