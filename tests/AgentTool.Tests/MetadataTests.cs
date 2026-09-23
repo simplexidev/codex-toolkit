@@ -84,6 +84,29 @@ public class MetadataTests
         Assert.True(File.Exists(Path.Combine(Root, "plugins/codex-toolkit/references/capability-coverage.md")));
     }
     [Fact]
+    public void DotnetSkillsProvenanceIsPinnedCompleteAndReferenceOnly()
+    {
+        var manifest = JsonNode.Parse(File.ReadAllText(Path.Combine(Root, "upstream/dotnet-skills.json")))!;
+        Assert.Equal("dotnet/skills", manifest["snapshot"]!["repository"]!.GetValue<string>());
+        Assert.Matches("^[0-9a-f]{40}$", manifest["snapshot"]!["commit"]!.GetValue<string>());
+        Assert.Equal("MIT", manifest["snapshot"]!["license"]!["spdx"]!.GetValue<string>());
+
+        var plugins = manifest["plugins"]!.AsArray();
+        var decisions = manifest["decisions"]!.AsArray();
+        Assert.Equal(manifest["summary"]!["plugins"]!.GetValue<int>(), plugins.Count);
+        Assert.Equal(manifest["summary"]!["skills"]!.GetValue<int>(), plugins.Sum(x => x!["skillCount"]!.GetValue<int>()));
+        Assert.Equal(manifest["summary"]!["skillBytes"]!.GetValue<int>(), plugins.Sum(x => x!["skillBytes"]!.GetValue<int>()));
+        Assert.Equal(manifest["summary"]!["skillWords"]!.GetValue<int>(), plugins.Sum(x => x!["skillWords"]!.GetValue<int>()));
+        Assert.Equal(manifest["summary"]!["supportingFiles"]!.GetValue<int>(), plugins.Sum(x => x!["supportingFileCount"]!.GetValue<int>()));
+        Assert.Equal(manifest["summary"]!["supportingBytes"]!.GetValue<int>(), plugins.Sum(x => x!["supportingBytes"]!.GetValue<int>()));
+        var expectedPaths = plugins.SelectMany(plugin => plugin!["skills"]!.AsArray().Select(skill => $"plugins/{plugin["id"]!.GetValue<string>()}/skills/{skill!.GetValue<string>()}/SKILL.md")).Order(StringComparer.Ordinal).ToArray();
+        var decisionPaths = decisions.SelectMany(x => x!["upstreamPaths"]!.AsArray()).Select(x => x!.GetValue<string>()).Order(StringComparer.Ordinal).ToArray();
+        Assert.Equal(expectedPaths, decisionPaths);
+        Assert.DoesNotContain(decisions, x => x!["classification"]!.GetValue<string>().StartsWith("VENDOR_", StringComparison.Ordinal));
+        Assert.True(File.Exists(Path.Combine(Root, "plugins/codex-toolkit/references/dotnet-skills-provenance.md")));
+        Assert.False(Directory.Exists(Path.Combine(Root, "plugins/codex-toolkit/skills/dotnet")));
+    }
+    [Fact]
     public async Task ReleaseArchiveContainsUserFacingMetadataAndExcludesDevelopmentState()
     {
         using var repo = new TemporaryGitRepository(); var archive = Path.Combine(repo.Root, "codex-toolkit.zip");
