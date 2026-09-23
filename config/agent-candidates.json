@@ -1,0 +1,398 @@
+{
+  "$schema": "../schemas/agent-candidates.schema.json",
+  "manifestVersion": 1,
+  "owner": "simplexidev/codex-toolkit",
+  "asOf": "2026-09-23",
+  "detectedSystem": {
+    "cliVersion": "0.155.1",
+    "multiAgentFeature": "enabled",
+    "multiAgentV2Feature": "disabled",
+    "roleSelectionInActiveSpawnSurface": false,
+    "customRoleFileParsing": "accepted",
+    "customRoleDirectory": "$CODEX_HOME/agents/*.toml",
+    "concurrencySetting": "templates/project/.codex/config.toml sets agents.max_concurrent_threads_per_session = 3",
+    "notes": [
+      "The active spawn surface accepts task, context-forking, model and reasoning overrides but no role selector.",
+      "The installed prompt describes subagents as equal-capability contexts sharing the filesystem and tool surface.",
+      "Custom role TOML parsed without a malformed-role warning in an isolated temporary Codex home.",
+      "The built-in explorer comparator must be feature-gated because it is not exposed by the detected runtime surface."
+    ]
+  },
+  "policy": {
+    "hierarchy": ["deterministic", "jev", "agent", "stronger-agent"],
+    "productionChanges": "none",
+    "runtimeDefaultExclusions": ["eval-judge"],
+    "decisionVocabulary": ["KEEP", "MODIFY", "RETIRE", "REPLACE_WITH_BUILTIN", "EVALUATE_FOR_ADD", "INSUFFICIENT_EVIDENCE"]
+  },
+  "evidence": [
+    {
+      "id": "cli-version",
+      "kind": "installed-cli",
+      "locator": "codex --version",
+      "supports": ["Codex CLI version 0.155.1 was audited."]
+    },
+    {
+      "id": "cli-features",
+      "kind": "installed-cli",
+      "locator": "codex features list",
+      "supports": ["multi_agent is stable and enabled.", "multi_agent_v2 is stable and disabled."]
+    },
+    {
+      "id": "active-spawn-surface",
+      "kind": "runtime-surface",
+      "locator": "spawn_agent tool schema and codex debug prompt-input",
+      "supports": ["No role or agent_type selector is exposed.", "Subagents inherit or explicitly override model and reasoning.", "Subagents share the workspace and available tools."]
+    },
+    {
+      "id": "custom-role-parse",
+      "kind": "installed-cli",
+      "locator": "isolated CODEX_HOME app-server startup with agents/reviewer.toml",
+      "supports": ["The current reviewer TOML shape is accepted by the installed parser."]
+    },
+    {
+      "id": "reviewer-source",
+      "kind": "repository",
+      "locator": "agents/reviewer.toml",
+      "supports": ["Reviewer model, reasoning, read-only sandbox, purpose and instructions."]
+    },
+    {
+      "id": "installer-source",
+      "kind": "repository",
+      "locator": "tools/AgentTool.cs:Installer.Plan",
+      "supports": ["Toolkit agent TOML files are linked into the Codex agent directory."]
+    },
+    {
+      "id": "capability-source",
+      "kind": "repository",
+      "locator": "config/capabilities.json",
+      "supports": ["Deterministic-first routing, current skill/tool overlap and review activation policy."]
+    },
+    {
+      "id": "retired-role-source",
+      "kind": "git-history",
+      "locator": "commit 2a5c0700cb9f42ef7d9c75ab5ffdc9447b9bce55",
+      "supports": ["code-mapper and log-analyzer were removed during routing simplification.", "Their last model, sandbox and instruction contracts remain auditable."]
+    },
+    {
+      "id": "official-multi-agent",
+      "kind": "official-docs",
+      "locator": "https://developers.openai.com/api/docs/guides/agents-api/multi-agent",
+      "supports": ["Subagents have separate contexts.", "Subagents inherit configured tools and share the environment filesystem.", "Delegation is intended for independent bounded work."]
+    }
+  ],
+  "builtInRoles": [
+    {
+      "id": "root-coordinator",
+      "class": "built-in",
+      "lifecycle": "current",
+      "availability": "available",
+      "purpose": "Own the user task, decide whether bounded delegation is justified, and synthesize subagent results.",
+      "disposition": "KEEP",
+      "rationale": "This is the required orchestration role and avoids a separate toolkit coordinator.",
+      "evidence": ["active-spawn-surface", "official-multi-agent"],
+      "model": { "name": "session-selected", "reasoning": "session-selected", "source": "inherits-parent" },
+      "staticCost": { "trigger": "session-root", "metadata": "none", "invocation": "none", "contextIsolation": "none" },
+      "capabilities": { "sandbox": "session policy", "tools": ["all session tools"], "mcp": ["configured session MCP"], "skills": ["task-triggered installed skills"] },
+      "interface": {
+        "callers": ["user"],
+        "inputs": ["user request", "workspace instructions", "tool and skill metadata"],
+        "outputs": ["completed result", "bounded delegated tasks", "synthesized evidence"]
+      },
+      "overlap": ["All candidate roles are narrower slices of root reasoning."],
+      "isolationValue": "None itself; it benefits when a delegated context prevents broad evidence from displacing task state."
+    },
+    {
+      "id": "generic-subagent",
+      "class": "built-in",
+      "lifecycle": "current",
+      "availability": "available",
+      "purpose": "Perform an independently scoped task in a separate context with the shared filesystem and inherited capabilities.",
+      "disposition": "KEEP",
+      "rationale": "It is the only role selectable through the detected spawn surface and is the mandatory baseline for specialist evaluations.",
+      "evidence": ["active-spawn-surface", "official-multi-agent"],
+      "model": { "name": "parent by default", "reasoning": "parent by default", "source": "inherits-parent" },
+      "staticCost": { "trigger": "explicit-delegation", "metadata": "low", "invocation": "separate-model-turn", "contextIsolation": "high" },
+      "capabilities": { "sandbox": "inherited session policy", "tools": ["inherited session tools"], "mcp": ["inherited configured MCP"], "skills": ["task-triggered installed skills"] },
+      "interface": {
+        "callers": ["root coordinator", "other subagents"],
+        "inputs": ["bounded task message", "selected conversation turns", "shared workspace state"],
+        "outputs": ["concise findings or bounded edits", "paths changed when editing", "unresolved evidence gaps"]
+      },
+      "overlap": ["Can perform every proposed specialist task when given a precise task message."],
+      "isolationValue": "High for independent evidence collection; specialization must beat this generic baseline after accounting for added routing metadata."
+    },
+    {
+      "id": "built-in-explorer",
+      "class": "built-in",
+      "lifecycle": "conditional-comparator",
+      "availability": "not-exposed",
+      "purpose": "Potential native read-only repository exploration comparator requested by the roadmap.",
+      "disposition": "INSUFFICIENT_EVIDENCE",
+      "rationale": "Neither the active spawn schema nor official documentation inspected for this audit exposes a selectable explorer role; metrics must skip rather than silently substitute it.",
+      "evidence": ["active-spawn-surface", "official-multi-agent"],
+      "model": { "name": "unknown", "reasoning": "unknown", "source": "candidate" },
+      "staticCost": { "trigger": "conditional", "metadata": "unknown", "invocation": "unknown", "contextIsolation": "unknown" },
+      "capabilities": { "sandbox": "unknown", "tools": ["unknown"], "mcp": ["unknown"], "skills": ["unknown"] },
+      "interface": {
+        "callers": ["root coordinator if a future runtime exposes the role"],
+        "inputs": ["feature-detected native role contract"],
+        "outputs": ["repository map if supported"]
+      },
+      "overlap": ["historical code-mapper", "generic-subagent repository exploration"],
+      "isolationValue": "Potentially high, but unmeasurable until the role is actually exposed and its contract can be recorded."
+    }
+  ],
+  "toolkitRoles": [
+    {
+      "id": "reviewer",
+      "class": "toolkit-custom",
+      "lifecycle": "current",
+      "availability": "repository-only",
+      "purpose": "Independently review an explicitly requested or substantial high-risk completed diff for actionable defects.",
+      "disposition": "KEEP",
+      "rationale": "Its read-only boundary, high-risk trigger and independent context are distinct from post-review comment handling; retain while metrics compare narrower security specialization.",
+      "evidence": ["reviewer-source", "installer-source", "capability-source"],
+      "model": { "name": "gpt-5.6-terra", "reasoning": "high", "source": "fixed" },
+      "staticCost": { "trigger": "explicit-or-high-risk", "metadata": "low", "invocation": "separate-model-turn", "contextIsolation": "high" },
+      "capabilities": { "sandbox": "read-only", "tools": ["inherited tools; deterministic checks preferred"], "mcp": ["inherited configured MCP; no role-specific MCP"], "skills": ["task-triggered skills; address-pr-review is post-review rather than automatic input"] },
+      "interface": {
+        "callers": ["root coordinator after a completed diff"],
+        "inputs": ["explicit review request or high-risk completion", "actual diff", "direct dependencies", "relevant validation evidence"],
+        "outputs": ["prioritized actionable findings", "triggering conditions", "file and line evidence", "explicit no-findings result"]
+      },
+      "overlap": ["Codex review command", "generic-subagent review", "security-reviewer candidate", "address-pr-review skill after comments already exist"],
+      "isolationValue": "High because an untouched read-only context can challenge implementation assumptions without consuming the root context."
+    },
+    {
+      "id": "code-mapper",
+      "class": "toolkit-custom",
+      "lifecycle": "historical-retired",
+      "availability": "not-implemented",
+      "purpose": "Map files, symbols and dependencies for one implementation question after deterministic narrowing.",
+      "disposition": "INSUFFICIENT_EVIDENCE",
+      "rationale": "The role was retired as duplicative, but the requested native explorer comparator is not exposed in this runtime; keep it retired unless metrics demonstrate a material gain over the generic subagent or a future native explorer.",
+      "evidence": ["retired-role-source", "capability-source", "active-spawn-surface"],
+      "model": { "name": "gpt-5.6-luna", "reasoning": "low", "source": "fixed" },
+      "staticCost": { "trigger": "not-active", "metadata": "none", "invocation": "none", "contextIsolation": "high" },
+      "capabilities": { "sandbox": "read-only", "tools": ["repo locate", "repo affected-projects", "search and file reads"], "mcp": ["none role-specific"], "skills": ["none role-specific"] },
+      "interface": {
+        "callers": ["historical root coordinator"],
+        "inputs": ["specific implementation question", "deterministically narrowed paths or symbols"],
+        "outputs": ["paths", "symbols", "relationships", "unresolved gaps"]
+      },
+      "overlap": ["generic-subagent", "built-in-explorer if exposed", "AgentTool repository primitives", "root search"],
+      "isolationValue": "Medium to high for large maps, but deterministic search often keeps the work small enough for the root context."
+    },
+    {
+      "id": "log-analyzer",
+      "class": "toolkit-custom",
+      "lifecycle": "historical-retired",
+      "availability": "not-implemented",
+      "purpose": "Triage existing build, test, SARIF and diagnostic artifacts without rerunning expensive collection.",
+      "disposition": "RETIRE",
+      "rationale": "Broad artifact triage overlaps deterministic summarizers and several domain skills; only a causal runtime diagnostician should be reconsidered through metrics.",
+      "evidence": ["retired-role-source", "capability-source"],
+      "model": { "name": "gpt-5.6-luna", "reasoning": "low", "source": "fixed" },
+      "staticCost": { "trigger": "not-active", "metadata": "none", "invocation": "none", "contextIsolation": "high" },
+      "capabilities": { "sandbox": "read-only", "tools": ["logs summarize", "sarif summarize", "structured artifact readers"], "mcp": ["none role-specific"], "skills": ["ci-triage", "diagnose-build", "diagnose-dotnet"] },
+      "interface": {
+        "callers": ["historical root coordinator"],
+        "inputs": ["existing bounded artifact paths", "failure question"],
+        "outputs": ["first causal failure", "cause candidates", "artifact evidence", "next targeted check"]
+      },
+      "overlap": ["AgentTool log and SARIF summaries", "build-diagnostician candidate", "runtime-diagnostician candidate", "test-specialist candidate"],
+      "isolationValue": "High for noisy logs, but the broad role boundary makes routing ambiguous and duplicates cheaper structured summaries."
+    }
+  ],
+  "candidateRoles": [
+    {
+      "id": "security-reviewer",
+      "class": "candidate",
+      "lifecycle": "proposed",
+      "availability": "not-implemented",
+      "purpose": "Review security-sensitive diffs using analyzer and advisory evidence without replacing authoritative findings.",
+      "disposition": "EVALUATE_FOR_ADD",
+      "rationale": "A narrow threat-focused pass may improve recall on auth, secrets, injection and trust-boundary changes, but must beat the current reviewer on matched high-risk fixtures.",
+      "evidence": ["reviewer-source", "capability-source"],
+      "model": { "name": "candidate matrix", "reasoning": "high", "source": "candidate" },
+      "staticCost": { "trigger": "conditional", "metadata": "low", "invocation": "separate-model-turn", "contextIsolation": "high" },
+      "capabilities": { "sandbox": "read-only", "tools": ["sarif summarize", "package audit", "diff and source reads"], "mcp": ["none by default"], "skills": ["security-scan", "package-audit when explicitly relevant"] },
+      "interface": { "callers": ["root coordinator for security-sensitive completed diffs"], "inputs": ["bounded diff", "trust boundaries", "structured security findings"], "outputs": ["exploitable finding hypotheses", "file and line evidence", "severity without downgrading authoritative findings", "explicit no-findings result"] },
+      "overlap": ["reviewer", "security-scan skill", "package-audit skill"],
+      "isolationValue": "High for adversarial review of security-sensitive changes."
+    },
+    {
+      "id": "runtime-diagnostician",
+      "class": "candidate",
+      "lifecycle": "proposed",
+      "availability": "not-implemented",
+      "purpose": "Form and test causal hypotheses from bounded runtime measurements, traces and logs after deterministic collection planning.",
+      "disposition": "EVALUATE_FOR_ADD",
+      "rationale": "Runtime failures benefit from causal isolation, but the role must remain distinct from generic log summarization and must not initiate sensitive collection without authority.",
+      "evidence": ["capability-source", "retired-role-source"],
+      "model": { "name": "candidate matrix", "reasoning": "high", "source": "candidate" },
+      "staticCost": { "trigger": "conditional", "metadata": "low", "invocation": "separate-model-turn", "contextIsolation": "high" },
+      "capabilities": { "sandbox": "read-only", "tools": ["dotnet diagnostics-plan", "results context", "logs summarize"], "mcp": ["none by default"], "skills": ["diagnose-dotnet", "investigate-dotnet-performance when relevant"] },
+      "interface": { "callers": ["root coordinator after deterministic runtime evidence exists"], "inputs": ["specific symptom", "bounded artifact paths", "environment facts", "collection authority constraints"], "outputs": ["ranked causal hypotheses", "evidence for and against", "single next discriminating check", "collection gaps"] },
+      "overlap": ["historical log-analyzer", "diagnose-dotnet skill", "generic-subagent"],
+      "isolationValue": "High because trace and runtime evidence is voluminous and can displace implementation context."
+    },
+    {
+      "id": "build-diagnostician",
+      "class": "candidate",
+      "lifecycle": "proposed",
+      "availability": "not-implemented",
+      "purpose": "Connect the first causal compiler or MSBuild diagnostic to source, project configuration or evaluated build state.",
+      "disposition": "EVALUATE_FOR_ADD",
+      "rationale": "Build failures have strong deterministic inputs; measure whether a specialist reduces tokens and downstream-noise errors beyond the existing diagnose-build skill.",
+      "evidence": ["capability-source"],
+      "model": { "name": "candidate matrix", "reasoning": "medium", "source": "candidate" },
+      "staticCost": { "trigger": "conditional", "metadata": "low", "invocation": "separate-model-turn", "contextIsolation": "medium" },
+      "capabilities": { "sandbox": "read-only", "tools": ["dotnet inspect", "dotnet build-plan", "logs summarize", "repo health"], "mcp": ["none by default"], "skills": ["diagnose-build"] },
+      "interface": { "callers": ["root coordinator after a failed build"], "inputs": ["structured first diagnostic", "project evaluation facts", "bounded build log"], "outputs": ["causal diagnosis", "affected configuration or source", "minimal verification step"] },
+      "overlap": ["diagnose-build skill", "historical log-analyzer", "generic-subagent"],
+      "isolationValue": "Medium; useful mainly when build graphs or logs are too large for the root context."
+    },
+    {
+      "id": "test-specialist",
+      "class": "candidate",
+      "lifecycle": "proposed",
+      "availability": "not-implemented",
+      "purpose": "Select, author and assess focused tests using deterministic framework, platform, result and coverage facts.",
+      "disposition": "EVALUATE_FOR_ADD",
+      "rationale": "The toolkit already has four focused testing skills, so a persistent role is justified only if isolation improves test adequacy or lowers root-context cost.",
+      "evidence": ["capability-source"],
+      "model": { "name": "candidate matrix", "reasoning": "medium", "source": "candidate" },
+      "staticCost": { "trigger": "conditional", "metadata": "low", "invocation": "separate-model-turn", "contextIsolation": "medium" },
+      "capabilities": { "sandbox": "workspace-write for authoring; read-only for assessment", "tools": ["dotnet test-plan", "test-results summarize", "coverage summarize", "dotnet verify"], "mcp": ["none by default"], "skills": ["run-dotnet-tests", "write-dotnet-tests", "dotnet-test-quality", "dotnet-coverage"] },
+      "interface": { "callers": ["root coordinator for an independently bounded test task"], "inputs": ["behavioral acceptance criteria", "affected code", "framework and platform facts"], "outputs": ["targeted tests or test plan", "adequacy assessment", "structured result and coverage evidence"] },
+      "overlap": ["four testing skills", "generic-subagent", "root implementation reasoning"],
+      "isolationValue": "Medium for independent authoring and high for adversarial adequacy review; low for a single small test."
+    },
+    {
+      "id": "upstream-reviewer",
+      "class": "candidate",
+      "lifecycle": "proposed",
+      "availability": "not-implemented",
+      "purpose": "Review detected upstream drift for compatibility, provenance, license and bounded adoption decisions.",
+      "disposition": "EVALUATE_FOR_ADD",
+      "rationale": "Deterministic manifests establish drift; measure whether a specialist improves adoption decisions on nontrivial changes without broadly loading upstream sources.",
+      "evidence": ["capability-source"],
+      "model": { "name": "candidate matrix", "reasoning": "high", "source": "candidate" },
+      "staticCost": { "trigger": "conditional", "metadata": "low", "invocation": "separate-model-turn", "contextIsolation": "high" },
+      "capabilities": { "sandbox": "read-only", "tools": ["upstream status", "upstream update", "artifact inspect", "exact repository search"], "mcp": ["none by default"], "skills": ["dependency-change", "api-compatibility when relevant"] },
+      "interface": { "callers": ["root coordinator after structured drift detection"], "inputs": ["pinned identity", "version delta", "reviewed bounded upstream diff", "license metadata"], "outputs": ["adopt, defer or reject recommendation", "compatibility risks", "required local changes and tests"] },
+      "overlap": ["upstream maintenance deterministic commands", "dependency-change skill", "generic-subagent"],
+      "isolationValue": "High when upstream review is large enough that source context would pollute the implementation thread."
+    },
+    {
+      "id": "release-auditor",
+      "class": "candidate",
+      "lifecycle": "proposed",
+      "availability": "not-implemented",
+      "purpose": "Independently verify that release claims are backed by gates, identities, hashes and authorized exceptions.",
+      "disposition": "EVALUATE_FOR_ADD",
+      "rationale": "Release integrity is mostly deterministic; evaluate only the incremental value of an independent exception and evidence-completeness review.",
+      "evidence": ["capability-source"],
+      "model": { "name": "candidate matrix", "reasoning": "high", "source": "candidate" },
+      "staticCost": { "trigger": "conditional", "metadata": "low", "invocation": "separate-model-turn", "contextIsolation": "high" },
+      "capabilities": { "sandbox": "read-only", "tools": ["release", "artifact inspect", "artifact verify", "dotnet release-verify", "git state"], "mcp": ["none by default"], "skills": ["release-verify", "versioning", "reproducible-build when relevant"] },
+      "interface": { "callers": ["root coordinator before an authorized release action"], "inputs": ["release candidate artifacts", "gate results", "version and commit identity", "documented exceptions"], "outputs": ["evidence-backed ready or not-ready result", "missing gates", "identity or integrity mismatches", "exceptions requiring human authorization"] },
+      "overlap": ["release-verify skill", "deterministic release commands", "reviewer"],
+      "isolationValue": "High because independence matters for release sign-off, though it must never replace deterministic integrity checks or human publication authority."
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "code-mapper-vs-built-in-explorer",
+      "question": "Does a specialized mapper or a feature-detected native explorer outperform a generic subagent after deterministic narrowing?",
+      "fixtures": ["small exact-symbol lookup", "cross-project dependency trace", "large ambiguous implementation map"],
+      "arms": [
+        { "id": "generic", "role": "generic-subagent", "availabilityGate": "always", "configuration": "Parent model; task requests paths, symbols, relationships and gaps after AgentTool narrowing." },
+        { "id": "historical-mapper", "role": "code-mapper", "availabilityGate": "metrics harness supplies historical prompt only; never installs it", "configuration": "Historical gpt-5.6-luna/low/read-only contract from commit 2a5c070 parent." },
+        { "id": "native-explorer", "role": "built-in-explorer", "availabilityGate": "run only when the tested Codex spawn schema exposes an explorer role", "configuration": "Record detected native model, reasoning, sandbox and tool contract; do not emulate when absent." }
+      ],
+      "requiredMeasurements": ["task success", "path and symbol precision", "relationship recall", "unsupported claims", "input and output tokens", "tool calls", "files read", "elapsed time", "root context retained", "routing metadata bytes"],
+      "successCriteria": ["No specialist is added unless it materially improves quality or context retention over generic.", "A native explorer replacement requires actual role availability and noninferior quality."],
+      "safetyConstraints": ["read-only", "no broad source loading before deterministic narrowing", "skip unavailable native arm"]
+    },
+    {
+      "id": "reviewer-vs-security-reviewer",
+      "question": "Does a narrow security reviewer improve security-defect recall without unacceptable false positives or duplicated cost?",
+      "fixtures": ["ordinary correctness diff", "authentication boundary change", "secret handling regression", "injection-prone command construction", "clean security-sensitive diff"],
+      "arms": [
+        { "id": "current-reviewer", "role": "reviewer", "availabilityGate": "always from repository definition", "configuration": "gpt-5.6-terra/high/read-only current prompt." },
+        { "id": "security-candidate", "role": "security-reviewer", "availabilityGate": "metrics-only candidate prompt", "configuration": "Read-only, security-triggered candidate with structured analyzer evidence." },
+        { "id": "generic", "role": "generic-subagent", "availabilityGate": "always", "configuration": "Matched model and reasoning with a bounded security review task." }
+      ],
+      "requiredMeasurements": ["validated defect recall", "false-positive rate", "severity calibration", "file and line evidence quality", "explicit clean result accuracy", "tokens", "elapsed time", "routing precision"],
+      "successCriteria": ["Security specialization improves validated recall on security fixtures.", "False positives and cost remain within metrics-owned thresholds.", "Current reviewer remains noninferior on ordinary correctness fixtures."],
+      "safetyConstraints": ["read-only", "never downgrade SARIF or advisory findings", "no exploit execution", "no automatic activation for routine diffs"]
+    },
+    {
+      "id": "log-analyzer-vs-runtime-diagnostician",
+      "question": "Does causal runtime specialization outperform historical broad log triage and a generic subagent on bounded evidence?",
+      "fixtures": ["first-failure hidden by downstream noise", "runtime counter anomaly", "trace-summary ambiguity", "insufficient evidence requiring one next check"],
+      "arms": [
+        { "id": "generic", "role": "generic-subagent", "availabilityGate": "always", "configuration": "Matched model with deterministic summaries supplied." },
+        { "id": "historical-log-analyzer", "role": "log-analyzer", "availabilityGate": "metrics harness supplies historical prompt only; never installs it", "configuration": "Historical gpt-5.6-luna/low/read-only contract." },
+        { "id": "runtime-candidate", "role": "runtime-diagnostician", "availabilityGate": "metrics-only candidate prompt", "configuration": "Read-only causal diagnosis after diagnostics-plan and bounded artifact selection." }
+      ],
+      "requiredMeasurements": ["root-cause ranking accuracy", "downstream-noise rejection", "next-check information gain", "unsupported causal claims", "artifact bytes loaded", "tokens", "elapsed time"],
+      "successCriteria": ["Candidate improves causal accuracy over both baselines.", "Candidate requests no unnecessary recollection and identifies insufficient evidence when appropriate."],
+      "safetyConstraints": ["existing bounded artifacts only", "no sensitive collection without authority", "no raw private artifact export", "JEV receives sanitized bounded data only"]
+    },
+    {
+      "id": "build-diagnostician",
+      "question": "Does a build specialist add value beyond diagnose-build plus root reasoning?",
+      "fixtures": ["compiler source error", "evaluated property mismatch", "transitive project failure noise", "binlog-needed structural failure"],
+      "arms": [
+        { "id": "skill-root", "role": "root-coordinator", "availabilityGate": "always", "configuration": "Root uses diagnose-build and deterministic AgentTool evidence." },
+        { "id": "generic", "role": "generic-subagent", "availabilityGate": "always", "configuration": "Bounded build diagnosis with matched evidence." },
+        { "id": "build-candidate", "role": "build-diagnostician", "availabilityGate": "metrics-only candidate prompt", "configuration": "Read-only specialist; structured diagnostics before raw logs." }
+      ],
+      "requiredMeasurements": ["first-cause accuracy", "downstream-noise rejection", "fix localization", "unnecessary raw-log reads", "tokens", "elapsed time", "root context retained"],
+      "successCriteria": ["Candidate materially improves first-cause accuracy or context retention over both baselines."],
+      "safetyConstraints": ["read-only", "no build rerun when existing structured evidence is sufficient", "bounded binlog handling"]
+    },
+    {
+      "id": "test-specialist",
+      "question": "Does a test specialist improve behavioral adequacy or efficiency beyond focused testing skills used by root or generic agents?",
+      "fixtures": ["write regression test", "select affected test subset", "detect assertion-free weak test", "interpret structured failure and coverage gap"],
+      "arms": [
+        { "id": "skill-root", "role": "root-coordinator", "availabilityGate": "always", "configuration": "Root uses the focused testing skill selected by fixture." },
+        { "id": "generic", "role": "generic-subagent", "availabilityGate": "always", "configuration": "Matched bounded testing task with relevant skill available." },
+        { "id": "test-candidate", "role": "test-specialist", "availabilityGate": "metrics-only candidate prompt", "configuration": "Candidate switches sandbox by fixture: write for authoring, read-only for assessment." }
+      ],
+      "requiredMeasurements": ["behavioral defect detection", "test correctness", "mutation or seeded-fault kill rate", "affected-test precision", "unnecessary test execution", "tokens", "elapsed time", "edit contention"],
+      "successCriteria": ["Candidate improves adequacy or isolation enough to offset overlap with four existing skills."],
+      "safetyConstraints": ["temporary or fixture workspaces", "no edits during assessment fixtures", "no concurrent edits to shared files"]
+    },
+    {
+      "id": "upstream-reviewer",
+      "question": "Does an upstream specialist improve compatibility and adoption decisions after deterministic drift detection?",
+      "fixtures": ["version-only no-op drift", "breaking API delta", "license metadata change", "large upstream change requiring bounded selection"],
+      "arms": [
+        { "id": "skill-root", "role": "root-coordinator", "availabilityGate": "always", "configuration": "Root uses upstream status/update plus relevant dependency or API skill." },
+        { "id": "generic", "role": "generic-subagent", "availabilityGate": "always", "configuration": "Bounded reviewed upstream diff and manifests supplied." },
+        { "id": "upstream-candidate", "role": "upstream-reviewer", "availabilityGate": "metrics-only candidate prompt", "configuration": "Read-only provenance, license and compatibility review." }
+      ],
+      "requiredMeasurements": ["adoption decision accuracy", "compatibility issue recall", "license-change detection", "unnecessary upstream bytes loaded", "tokens", "elapsed time", "citation precision"],
+      "successCriteria": ["Candidate improves nontrivial adoption decisions without broad context loading.", "Candidate abstains when deterministic identity or provenance is missing."],
+      "safetyConstraints": ["read-only", "pinned upstream identity", "no unreviewed executable upstream content", "no license conclusions beyond evidence and escalation"]
+    },
+    {
+      "id": "release-auditor",
+      "question": "Does an independent release auditor catch evidence and exception gaps beyond the deterministic release gate?",
+      "fixtures": ["clean release candidate", "version mismatch", "missing checksum", "stale gate result", "documented exception requiring authority"],
+      "arms": [
+        { "id": "gate-root", "role": "root-coordinator", "availabilityGate": "always", "configuration": "Root interprets release-verify and artifact facts." },
+        { "id": "generic", "role": "generic-subagent", "availabilityGate": "always", "configuration": "Independent matched-model audit of the same bounded evidence." },
+        { "id": "release-candidate", "role": "release-auditor", "availabilityGate": "metrics-only candidate prompt", "configuration": "Read-only evidence completeness and exception review." }
+      ],
+      "requiredMeasurements": ["integrity-gap recall", "false block rate", "stale-evidence detection", "exception escalation accuracy", "tokens", "elapsed time", "independence from implementation context"],
+      "successCriteria": ["Candidate catches seeded integrity or evidence gaps missed by baselines.", "Candidate never approves publication or substitutes judgment for failed deterministic gates."],
+      "safetyConstraints": ["read-only", "no publishing", "no tag mutation", "hash and identity claims must come from deterministic evidence", "human authority for exceptions"]
+    }
+  ]
+}

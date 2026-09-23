@@ -156,6 +156,26 @@ public class MetadataTests
         }
     }
     [Fact]
+    public void AgentCandidateManifestIsBoundedMetricsReadyAndDoesNotInstallCandidates()
+    {
+        var manifest = JsonNode.Parse(File.ReadAllText(Path.Combine(Root, "config/agent-candidates.json")))!;
+        var builtIns = manifest["builtInRoles"]!.AsArray();
+        var toolkit = manifest["toolkitRoles"]!.AsArray();
+        var candidates = manifest["candidateRoles"]!.AsArray();
+        var roles = builtIns.Concat(toolkit).Concat(candidates).ToArray();
+        var ids = roles.Select(x => x!["id"]!.GetValue<string>()).ToArray();
+        Assert.Equal(ids.Length, ids.Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(new[] { "reviewer.toml" }, Directory.GetFiles(Path.Combine(Root, "agents"), "*.toml").Select(Path.GetFileName).Order());
+        Assert.Contains(toolkit, x => x!["id"]!.GetValue<string>() == "code-mapper" && x["lifecycle"]!.GetValue<string>() == "historical-retired");
+        Assert.Contains(toolkit, x => x!["id"]!.GetValue<string>() == "log-analyzer" && x["disposition"]!.GetValue<string>() == "RETIRE");
+        Assert.Contains(builtIns, x => x!["id"]!.GetValue<string>() == "built-in-explorer" && x["availability"]!.GetValue<string>() == "not-exposed");
+        Assert.All(candidates, x => Assert.Equal("EVALUATE_FOR_ADD", x!["disposition"]!.GetValue<string>()));
+        Assert.Contains("eval-judge", manifest["policy"]!["runtimeDefaultExclusions"]!.AsArray().Select(x => x!.GetValue<string>()));
+        var scenarios = manifest["scenarios"]!.AsArray();
+        Assert.Equal(new[] { "build-diagnostician", "code-mapper-vs-built-in-explorer", "log-analyzer-vs-runtime-diagnostician", "release-auditor", "reviewer-vs-security-reviewer", "test-specialist", "upstream-reviewer" }, scenarios.Select(x => x!["id"]!.GetValue<string>()).Order());
+        Assert.All(scenarios, scenario => Assert.InRange(scenario!["arms"]!.AsArray().Count, 2, 3));
+    }
+    [Fact]
     public void SkillActivationMetadataStaysNarrowAndCredentialFree()
     {
         var yaml = new DeserializerBuilder().Build();
