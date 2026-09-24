@@ -154,6 +154,7 @@ public class MetadataTests
             var agent = Toml.ToModel(File.ReadAllText(file));
             Assert.True(agent.ContainsKey("name")); Assert.True(agent.ContainsKey("description")); Assert.True(agent.ContainsKey("developer_instructions")); Assert.Equal("read-only", agent["sandbox_mode"]);
         }
+        Assert.Contains("Do not delegate, spawn subagents", File.ReadAllText(Path.Combine(Root, "agents", "reviewer.toml")), StringComparison.Ordinal);
     }
     [Fact]
     public void AgentCandidateManifestIsBoundedMetricsReadyAndDoesNotInstallCandidates()
@@ -166,11 +167,13 @@ public class MetadataTests
         var ids = roles.Select(x => x!["id"]!.GetValue<string>()).ToArray();
         Assert.Equal(ids.Length, ids.Distinct(StringComparer.Ordinal).Count());
         Assert.Equal(new[] { "reviewer.toml" }, Directory.GetFiles(Path.Combine(Root, "agents"), "*.toml").Select(Path.GetFileName).Order());
-        Assert.Contains(toolkit, x => x!["id"]!.GetValue<string>() == "code-mapper" && x["lifecycle"]!.GetValue<string>() == "historical-retired");
+        Assert.Contains(toolkit, x => x!["id"]!.GetValue<string>() == "code-mapper" && x["disposition"]!.GetValue<string>() == "REPLACE_WITH_BUILTIN");
         Assert.Contains(toolkit, x => x!["id"]!.GetValue<string>() == "log-analyzer" && x["disposition"]!.GetValue<string>() == "RETIRE");
         Assert.Contains(builtIns, x => x!["id"]!.GetValue<string>() == "built-in-explorer" && x["availability"]!.GetValue<string>() == "not-exposed");
-        Assert.All(candidates, x => Assert.Equal("EVALUATE_FOR_ADD", x!["disposition"]!.GetValue<string>()));
+        Assert.All(candidates, x => Assert.Equal("INSUFFICIENT_EVIDENCE", x!["disposition"]!.GetValue<string>()));
         Assert.Contains("eval-judge", manifest["policy"]!["runtimeDefaultExclusions"]!.AsArray().Select(x => x!.GetValue<string>()));
+        Assert.Equal("root-only; delegated agents must not delegate", manifest["policy"]!["delegation"]!.GetValue<string>());
+        Assert.Contains(manifest["evidence"]!.AsArray(), x => x!["id"]!.GetValue<string>() == "agent-capability-evaluation-2026-09-23");
         var scenarios = manifest["scenarios"]!.AsArray();
         Assert.Equal(new[] { "build-diagnostician", "code-mapper-vs-built-in-explorer", "log-analyzer-vs-runtime-diagnostician", "release-auditor", "reviewer-vs-security-reviewer", "test-specialist", "upstream-reviewer" }, scenarios.Select(x => x!["id"]!.GetValue<string>()).Order());
         Assert.All(scenarios, scenario => Assert.InRange(scenario!["arms"]!.AsArray().Count, 2, 3));
