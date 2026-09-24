@@ -9,5 +9,19 @@
   "includeThreshold": 0.7,
   "excludeThreshold": 0.1,
   "minConfidence": 0.8,
-  "cacheHours": 24
+  "cacheHours": 24,
+  "capabilities": {
+    "relevance": { "allowed": true, "purposes": ["candidate-relevance", "docs-impact", "test-gap-ranking", "coverage-gap-ranking"], "expectedCalls": 0, "maxCalls": 25, "deterministicFirst": true, "maxInputBytes": 4096, "maxCandidates": 25, "privacy": "sanitized-bounded-text", "minConfidence": 0.8, "uncertainty": "review", "gptEscalation": "normal" },
+    "pr-triage": { "allowed": true, "purposes": ["review-comment-categorization"], "expectedCalls": 0, "maxCalls": 20, "deterministicFirst": true, "maxInputBytes": 4096, "maxCandidates": 20, "privacy": "sanitized-metadata-and-excerpts", "minConfidence": 0.85, "uncertainty": "review", "gptEscalation": "normal" },
+    "sarif-triage": { "allowed": true, "purposes": ["finding-relevance-categorization"], "expectedCalls": 0, "maxCalls": 20, "deterministicFirst": true, "maxInputBytes": 4096, "maxCandidates": 20, "privacy": "sanitized-rule-and-location-summary", "minConfidence": 0.9, "uncertainty": "review", "gptEscalation": "normal" },
+    "failure-classification": { "allowed": true, "purposes": ["bounded-failure-category"], "expectedCalls": 0, "maxCalls": 5, "deterministicFirst": true, "maxInputBytes": 3072, "maxCandidates": 5, "privacy": "sanitized-structured-failure-summary", "minConfidence": 0.85, "uncertainty": "review", "gptEscalation": "normal" },
+    "upstream-classification": { "allowed": true, "purposes": ["bounded-upstream-change-category"], "expectedCalls": 0, "maxCalls": 5, "deterministicFirst": true, "maxInputBytes": 3072, "maxCandidates": 5, "privacy": "public-or-sanitized-upstream-summary", "minConfidence": 0.85, "uncertainty": "review", "gptEscalation": "normal" },
+    "ambiguous-routing": { "allowed": true, "purposes": ["capability-tie-break", "issue-prose-category"], "expectedCalls": 0, "maxCalls": 1, "deterministicFirst": true, "maxInputBytes": 2048, "maxCandidates": 1, "privacy": "sanitized-routing-metadata", "minConfidence": 0.9, "uncertainty": "review", "gptEscalation": "normal" },
+    "exact-repository-facts": { "allowed": false, "purposes": ["paths", "git-state", "dependencies"], "expectedCalls": 0, "maxCalls": 0, "deterministicFirst": true, "maxInputBytes": 1, "maxCandidates": 0, "privacy": "not-applicable", "minConfidence": 1.0, "uncertainty": "review", "gptEscalation": "normal" },
+    "exact-commands": { "allowed": false, "purposes": ["command-construction"], "expectedCalls": 0, "maxCalls": 0, "deterministicFirst": true, "maxInputBytes": 1, "maxCandidates": 0, "privacy": "not-applicable", "minConfidence": 1.0, "uncertainty": "review", "gptEscalation": "normal" },
+    "authorization-security": { "allowed": false, "purposes": ["authorization", "security-disposition"], "expectedCalls": 0, "maxCalls": 0, "deterministicFirst": true, "maxInputBytes": 1, "maxCandidates": 0, "privacy": "never-transmit", "minConfidence": 1.0, "uncertainty": "review", "gptEscalation": "stronger" },
+    "code-generation": { "allowed": false, "purposes": ["generate-code"], "expectedCalls": 0, "maxCalls": 0, "deterministicFirst": true, "maxInputBytes": 1, "maxCandidates": 0, "privacy": "not-applicable", "minConfidence": 1.0, "uncertainty": "review", "gptEscalation": "normal" },
+    "architecture": { "allowed": false, "purposes": ["architecture-decision"], "expectedCalls": 0, "maxCalls": 0, "deterministicFirst": true, "maxInputBytes": 1, "maxCandidates": 0, "privacy": "not-applicable", "minConfidence": 1.0, "uncertainty": "review", "gptEscalation": "stronger" },
+    "open-ended-debugging": { "allowed": false, "purposes": ["root-cause-analysis"], "expectedCalls": 0, "maxCalls": 0, "deterministicFirst": true, "maxInputBytes": 1, "maxCandidates": 0, "privacy": "never-transmit-raw-artifacts", "minConfidence": 1.0, "uncertainty": "review", "gptEscalation": "stronger" }
+  }
 }

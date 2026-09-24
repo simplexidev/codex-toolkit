@@ -22,7 +22,8 @@ an explicit quality audit or when candidate classification is unclear. Mutation
 tools and comprehensive suite audits require explicit request or material
 evidence.
 
-For more than ten sanitized, evidence-backed candidates, JEV may screen or rank
+For more than ten sanitized, evidence-backed candidates, JEV capability
+`relevance` with purpose `test-gap-ranking` may screen or rank
 relevance; retain file/behavior identifiers and review uncertain results.
 Never ask JEV to decide correctness, test outcomes, framework facts, or final
 adequacy. Report only supported findings, ordered by risk, with one concrete

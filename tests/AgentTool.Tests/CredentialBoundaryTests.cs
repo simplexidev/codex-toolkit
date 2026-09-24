@@ -53,10 +53,11 @@ public class CredentialBoundaryTests
         await WithCredential(key, async () =>
         {
             using var repo = new TemporaryGitRepository(); var input = Path.Combine(repo.Root, "screen.json");
-            File.WriteAllText(input, $"{{\"query\":\"relevant?\",\"candidates\":[{{\"id\":\"{key}\",\"text\":\"safe\"}}]}}");
+            File.WriteAllText(input, $"{{\"capability\":\"relevance\",\"purpose\":\"candidate-relevance\",\"deterministicNarrowed\":true,\"query\":\"relevant?\",\"candidates\":[{{\"id\":\"{key}\",\"text\":\"safe\"}}]}}");
             var args = new List<string> { "jev", "screen", "--input", input };
             if (dryRun) args.Add("--dry-run"); else args.Add("--safe-input");
-            var result = await AgentTool.Execute(Cli.Parse([.. args]), AgentTool.FindToolkit(), repo.Root, new(new() { Mode = mode }, new(), new(), new()));
+            var loaded = Settings.Load(AgentTool.FindToolkit(), _ => null);
+            var result = await AgentTool.Execute(Cli.Parse([.. args]), AgentTool.FindToolkit(), repo.Root, loaded with { Jev = loaded.Jev with { Mode = mode } });
             var output = AgentTool.Render(result, repo.Root, new());
             Assert.Equal("REVIEW", result.Status); Assert.DoesNotContain(key, output, StringComparison.Ordinal);
             Assert.False(Directory.Exists(Path.Combine(repo.Root, ".agent-tool", "jev-cache")));

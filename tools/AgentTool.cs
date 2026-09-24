@@ -52,8 +52,8 @@ public static class AgentTool
         results context <type> [--json] | clean [--dry-run]
 
         Common: --root DIR (target repository), --toolkit DIR, --json, --help
-        JEV input: {"state":"sanitized excerpt","instructions":"bounded question","criteria":...}
-        Screen input: {"query":"question","candidates":[{"id":"path","text":"safe excerpt"}]}
+        JEV input: {"capability":"configured-id","purpose":"allowed-purpose","deterministicNarrowed":true,"state":"sanitized excerpt","instructions":"bounded question","criteria":...}
+        Screen input: same routing metadata plus {"query":"question","candidates":[{"id":"path","text":"safe excerpt"}]}
         JEV defaults to auto; missing/invalid/uncertain answers return REVIEW for Codex.
         No command merges PRs, commits, pushes, installs external tools, or pulls Git updates.
         """;
@@ -296,39 +296,74 @@ public static class AgentTool
             if (kind == "screen") return Result.Review("Screen input must be an object; no candidate discarded.");
             throw new ArgumentException("Input object required.");
         }
+        var capability = input["capability"] is JsonValue capabilityValue && capabilityValue.TryGetValue<string>(out var capabilityText) ? capabilityText : "";
+        var purpose = input["purpose"] is JsonValue purposeValue && purposeValue.TryGetValue<string>(out var purposeText) ? purposeText : "";
+        settings.Capabilities.TryGetValue(capability, out var policy);
+        if (policy is null) return JevClient.PolicyReview(null, capability, purpose, "A configured JEV capability is required.");
+        if (!policy.Purposes.Contains(purpose, StringComparer.Ordinal)) return JevClient.PolicyReview(policy, capability, purpose, "Purpose is not allowed for this JEV capability.");
+        if (!policy.Allowed) return JevClient.PolicyReview(policy, capability, purpose, "JEV is disallowed for this capability; use deterministic tooling or GPT reasoning.");
+        var deterministicallyNarrowed = input["deterministicNarrowed"] is JsonValue narrowedValue && narrowedValue.TryGetValue<bool>(out var narrowed) && narrowed;
+        if (policy.DeterministicFirst && !deterministicallyNarrowed) return JevClient.PolicyReview(policy, capability, purpose, "Deterministic narrowing is required before JEV.");
         using var handler = new HttpClientHandler { AllowAutoRedirect = false };
         using var http = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(settings.TimeoutSeconds) };
         var client = new JevClient(http, settings, Path.Combine(root, ".agent-tool/jev-cache"));
         if (kind == "screen")
         {
-            if (input["candidates"] is not JsonArray candidates) return Result.Review("Screen candidates array is required; no candidate discarded.");
-            if (candidates.Count > settings.MaxCandidates) return Result.Review("Too many candidates; narrow deterministic search first.");
+            if (input["candidates"] is not JsonArray candidates) return JevClient.PolicyReview(policy, capability, purpose, "Screen candidates array is required; no candidate discarded.");
+            var candidateLimit = Math.Min(settings.MaxCandidates, Math.Min(policy.MaxCandidates, policy.MaxCalls));
+            if (candidates.Count > candidateLimit) return JevClient.PolicyReview(policy, capability, purpose, "Too many candidates for the capability call budget; narrow deterministic search first.");
             var query = input["query"] is JsonValue queryValue && queryValue.TryGetValue<string>(out var queryText) ? queryText : null;
-            if (string.IsNullOrWhiteSpace(query)) return Result.Review("Screen query is required; no candidate discarded.");
+            if (string.IsNullOrWhiteSpace(query)) return JevClient.PolicyReview(policy, capability, purpose, "Screen query is required; no candidate discarded.");
             var prepared = new List<(string Id, string Text)>();
             foreach (var candidate in candidates)
             {
                 if (candidate is not JsonObject item || item["id"] is not JsonValue idValue || !idValue.TryGetValue<string>(out var id) || string.IsNullOrWhiteSpace(id) || item["text"] is not JsonValue textValue || !textValue.TryGetValue<string>(out var text) || string.IsNullOrWhiteSpace(text))
-                    return Result.Review("Every screen candidate requires a non-empty string id and text; no candidate discarded.");
-                if (Secrets.LooksSensitive(id)) return Result.Review("Potential secret detected in candidate id; no candidate discarded.");
+                    return JevClient.PolicyReview(policy, capability, purpose, "Every screen candidate requires a non-empty string id and text; no candidate discarded.");
+                if (Secrets.LooksSensitive(id)) return JevClient.PolicyReview(policy, capability, purpose, "Potential secret detected in candidate id; no candidate discarded.");
                 prepared.Add((id, text));
             }
             if (prepared.Select(candidate => candidate.Id).Distinct(StringComparer.Ordinal).Count() != prepared.Count)
-                return Result.Review("Screen candidate ids must be unique; no candidate discarded.");
-            var answers = new List<object>(); int exitCode = 0;
+                return JevClient.PolicyReview(policy, capability, purpose, "Screen candidate ids must be unique; no candidate discarded.");
+            var answers = new List<object>(); int exitCode = 0, remoteCalls = 0, cacheHits = 0, fallbacks = 0, escalations = 0, uncertain = 0, contextAvoidedBytes = 0;
             foreach (var candidate in prepared)
             {
                 var request = JevClient.Request("noul", candidate.Text, $"Is this candidate relevant to: {query}", null, settings.Model);
-                var judgment = Secrets.LooksSensitive(request.ToJsonString()) ? Result.Review("Potential secret detected; request refused.") : c.Flag("dry-run") ? Result.Ok(request) : !c.Flag("safe-input") ? Result.Review("Use --safe-input only after minimizing and reviewing supplied text for external transmission.") : await client.Judge(request);
+                var judgment = Secrets.LooksSensitive(request.ToJsonString()) ? JevClient.PolicyReview(policy, capability, purpose, "Potential secret detected; request refused.") : c.Flag("dry-run") ? Result.Ok(request) : !c.Flag("safe-input") ? JevClient.PolicyReview(policy, capability, purpose, "Use --safe-input only after minimizing and reviewing supplied text for external transmission.") : await client.Judge(request, policy, purpose, capability);
                 exitCode = Math.Max(exitCode, judgment.ExitCode);
                 answers.Add(new { id = candidate.Id, judgment });
+                if (judgment.Status == "EXCLUDE") contextAvoidedBytes += Encoding.UTF8.GetByteCount(candidate.Text);
+                if (judgment.Status == "REVIEW") uncertain++;
+                var telemetry = JsonSerializer.SerializeToNode(judgment.Data, Json)?["instrumentation"];
+                remoteCalls += telemetry?["counts"]?["remoteCalls"]?.GetValue<int>() ?? 0;
+                cacheHits += telemetry?["counts"]?["cacheHits"]?.GetValue<int>() ?? 0;
+                fallbacks += telemetry?["counts"]?["fallbacks"]?.GetValue<int>() ?? 0;
+                escalations += telemetry?["counts"]?["escalations"]?.GetValue<int>() ?? 0;
             }
-            return new(exitCode == 0 ? "ok" : "REVIEW", answers, exitCode);
+            return new(exitCode == 0 ? "ok" : "REVIEW", new
+            {
+                judgments = answers,
+                instrumentation = new
+                {
+                    schemaVersion = 1,
+                    capability,
+                    purpose,
+                    privacy = policy.Privacy,
+                    budget = new { expectedCalls = policy.ExpectedCalls, maxCalls = policy.MaxCalls },
+                    bounds = new { policy.DeterministicFirst, policy.MaxInputBytes, policy.MaxCandidates },
+                    counts = new { candidates = prepared.Count, judgments = c.Flag("dry-run") ? 0 : prepared.Count, remoteCalls, cacheHits, fallbacks, escalations },
+                    confidence = new { reported = (double?)null, minimum = policy.MinConfidence, uncertain },
+                    fallback = new { used = fallbacks > 0, target = fallbacks > 0 ? "GPT" : null },
+                    escalation = new { required = escalations > 0, target = escalations > 0 ? policy.GptEscalation + "-gpt" : null },
+                    contextAvoidedBytes,
+                    payloadCaptured = false
+                }
+            }, exitCode);
         }
+        if (policy.MaxCalls < 1) return JevClient.PolicyReview(policy, capability, purpose, "JEV call budget is zero for this capability.");
         var payload = JevClient.Request(kind, input["state"]?.GetValue<string>() ?? "", input["instructions"]?.GetValue<string>() ?? "", input["criteria"], settings.Model);
-        if (c.Flag("dry-run")) return Secrets.LooksSensitive(payload.ToJsonString()) ? Result.Review("Potential secret detected; request refused.") : Result.Ok(payload);
-        if (!c.Flag("safe-input")) return Result.Review("Use --safe-input only after reviewing and minimizing supplied text for external transmission.");
-        return await client.Judge(payload);
+        if (c.Flag("dry-run")) return Secrets.LooksSensitive(payload.ToJsonString()) ? JevClient.PolicyReview(policy, capability, purpose, "Potential secret detected; request refused.") : Result.Ok(payload);
+        if (!c.Flag("safe-input")) return JevClient.PolicyReview(policy, capability, purpose, "Use --safe-input only after reviewing and minimizing supplied text for external transmission.");
+        return await client.Judge(payload, policy, purpose, capability);
     }
 
     static async Task<Result> Upstream(string toolkit, string artifacts, bool dryRun)
@@ -1376,6 +1411,27 @@ public record HealthSettings
     public string[] AllowedFrameworks { get; init; } = ["net10.0"];
 }
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public record JevCapabilityPolicy
+{
+    public bool Allowed { get; init; }
+    public string[] Purposes { get; init; } = [];
+    public int ExpectedCalls { get; init; }
+    public int MaxCalls { get; init; }
+    public bool DeterministicFirst { get; init; } = true;
+    public int MaxInputBytes { get; init; } = 1;
+    public int MaxCandidates { get; init; }
+    public string Privacy { get; init; } = "not-applicable";
+    public double MinConfidence { get; init; } = 1;
+    public string Uncertainty { get; init; } = "review";
+    public string GptEscalation { get; init; } = "normal";
+    public void Validate(string capability)
+    {
+        if (string.IsNullOrWhiteSpace(capability) || Purposes.Length == 0 || Purposes.Any(string.IsNullOrWhiteSpace) || ExpectedCalls < 0 || MaxCalls is < 0 or > 100 || ExpectedCalls > MaxCalls || MaxInputBytes is < 1 or > 65536 || MaxCandidates is < 0 or > 100 || MaxCandidates > MaxCalls || string.IsNullOrWhiteSpace(Privacy) || !double.IsFinite(MinConfidence) || MinConfidence is < 0 or > 1 || Uncertainty != "review" || GptEscalation is not ("normal" or "stronger") || Allowed != (MaxCalls > 0))
+            throw new ArgumentException($"Invalid JEV capability policy: {capability}.");
+    }
+}
+
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public record JevSettings
 {
     public string Mode { get; init; } = "auto";
@@ -1388,10 +1444,12 @@ public record JevSettings
     public double ExcludeThreshold { get; init; } = .10;
     public double MinConfidence { get; init; } = .80;
     public int CacheHours { get; init; } = 24;
+    public Dictionary<string, JevCapabilityPolicy> Capabilities { get; init; } = new(StringComparer.Ordinal);
     public void Validate()
     {
         if (Mode is not ("off" or "auto" or "required") || TimeoutSeconds is < 1 or > 120 || MaxInputBytes is < 1 or > 65536 || MaxCandidates is < 1 or > 100 || CacheHours is < 0 or > 720 || !double.IsFinite(IncludeThreshold) || !double.IsFinite(ExcludeThreshold) || !double.IsFinite(MinConfidence) || ExcludeThreshold < 0 || IncludeThreshold > 1 || ExcludeThreshold >= IncludeThreshold || MinConfidence is < 0 or > 1) throw new ArgumentException("Invalid JEV configuration.");
         if (!Uri.TryCreate(ApiUrl, UriKind.Absolute, out var url) || url.Scheme != "https" || url.UserInfo.Length != 0 || url.Query.Length != 0 || url.Fragment.Length != 0) throw new ArgumentException("JEV endpoint must use HTTPS without credentials, query or fragment.");
+        foreach (var (capability, policy) in Capabilities) policy.Validate(capability);
     }
 }
 public record Settings(JevSettings Jev, OutputSettings Output, HealthSettings Health, ToolkitSettings Toolkit)
@@ -1429,6 +1487,7 @@ public sealed class JevClient
     {
         this.http = http; this.settings = settings; this.cacheDirectory = cacheDirectory; this.credentialSource = credentialSource;
     }
+    static readonly JevCapabilityPolicy DefaultTestPolicy = new() { Allowed = true, Purposes = ["candidate-relevance"], ExpectedCalls = 0, MaxCalls = 1, MaxInputBytes = 16384, MaxCandidates = 1, Privacy = "sanitized-bounded-text", MinConfidence = .8 };
     public static JsonObject Request(string kind, string state, string instructions, JsonNode? criteria, string model)
     {
         if (string.IsNullOrWhiteSpace(state) || string.IsNullOrWhiteSpace(instructions)) throw new ArgumentException("state and instructions are required.");
@@ -1450,41 +1509,79 @@ public sealed class JevClient
         return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes("jev-v1\n" + endpoint + "\n" + Canonical(request)!.ToJsonString())));
     }
     public static string Route(double probability, JevSettings settings) => !double.IsFinite(probability) || probability is < 0 or > 1 ? "REVIEW" : probability >= settings.IncludeThreshold ? "INCLUDE" : probability <= settings.ExcludeThreshold ? "EXCLUDE" : "REVIEW";
-    public async Task<Result> Judge(JsonObject request)
+    public async Task<Result> Judge(JsonObject request, JevCapabilityPolicy? policy = null, string purpose = "candidate-relevance", string capability = "relevance")
     {
+        policy ??= DefaultTestPolicy;
         settings.Validate();
-        if (settings.Mode == "off") return Result.Review("JEV disabled.");
-        if (!JevCredentials.IsConfigured(credentialSource)) return Fallback("JEV credentials unavailable.");
+        policy.Validate("invocation");
+        if (!policy.Allowed || policy.MaxCalls < 1) return Decision("REVIEW", new { reason = "JEV capability is disallowed." }, policy, capability, purpose, null, false, 0, "GPT", "policy-disallowed");
+        if (!policy.Purposes.Contains(purpose, StringComparer.Ordinal)) return Decision("REVIEW", new { reason = "JEV purpose is not allowed for this capability." }, policy, capability, "unrecognized", null, false, 0, "GPT", "purpose-disallowed");
+        if (settings.Mode == "off") return Fallback("JEV disabled.", policy, capability, purpose, 0);
+        if (!JevCredentials.IsConfigured(credentialSource)) return Fallback("JEV credentials unavailable.", policy, capability, purpose, 0);
         var body = request.ToJsonString();
-        if (Encoding.UTF8.GetByteCount(body) > settings.MaxInputBytes || Secrets.LooksSensitive(body)) return Fallback("Input too large or potentially sensitive.");
+        if (Encoding.UTF8.GetByteCount(body) > Math.Min(settings.MaxInputBytes, policy.MaxInputBytes) || Secrets.LooksSensitive(body)) return Fallback("Input too large or potentially sensitive.", policy, capability, purpose, 0);
         var hash = Hash(request, settings.ApiUrl); var cache = Path.Combine(cacheDirectory, hash + ".json");
+        var remoteCalls = 0;
         try
         {
             SafeFiles.NoLinks(cache);
             if (settings.CacheHours > 0 && File.Exists(cache) && DateTime.UtcNow - File.GetLastWriteTimeUtc(cache) < TimeSpan.FromHours(settings.CacheHours))
             {
-                try { return Parse(JsonNode.Parse(await File.ReadAllTextAsync(cache))!, request, true); }
+                try { return Parse(JsonNode.Parse(await File.ReadAllTextAsync(cache))!, request, true, policy, purpose, capability: capability); }
                 catch (Exception e) when (e is JsonException or InvalidOperationException or ArgumentException or KeyNotFoundException) { /* Invalid cache is ignored; no guessed decisions. */ }
             }
             using var message = new HttpRequestMessage(HttpMethod.Post, settings.ApiUrl);
-            if (!JevCredentials.Authorize(message, credentialSource)) return Fallback("JEV credentials unavailable.");
+            if (!JevCredentials.Authorize(message, credentialSource)) return Fallback("JEV credentials unavailable.", policy, capability, purpose, 0);
             message.Content = new StringContent(body, Encoding.UTF8, "application/json");
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(settings.TimeoutSeconds));
+            remoteCalls = 1;
             using var response = await http.SendAsync(message, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
-            if (!response.IsSuccessStatusCode) return Fallback($"HTTP {(int)response.StatusCode}; response body withheld.");
+            if (!response.IsSuccessStatusCode) return Fallback($"HTTP {(int)response.StatusCode}; response body withheld.", policy, capability, purpose, remoteCalls);
             await using var stream = await response.Content.ReadAsStreamAsync(timeout.Token);
             using var memory = new MemoryStream(); var block = new byte[4096]; int count;
             while ((count = await stream.ReadAsync(block, timeout.Token)) > 0)
-            { if (memory.Length + count > 65536) return Fallback("Response too large."); await memory.WriteAsync(block.AsMemory(0, count), timeout.Token); }
+            { if (memory.Length + count > 65536) return Fallback("Response too large.", policy, capability, purpose, remoteCalls); await memory.WriteAsync(block.AsMemory(0, count), timeout.Token); }
             var json = JsonNode.Parse(memory.ToArray()) ?? throw new JsonException();
-            var parsed = Parse(json, request, false);
+            var parsed = Parse(json, request, false, policy, purpose, remoteCalls, capability);
             if (settings.CacheHours > 0) { try { SafeFiles.Atomic(cache, CacheResponse(json, request).ToJsonString()); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { /* Cache is an optimization only. */ } }
             return parsed;
         }
         catch (Exception e) when (e is HttpRequestException or OperationCanceledException or JsonException or InvalidOperationException or ArgumentException or KeyNotFoundException or IOException or UnauthorizedAccessException)
-        { return Fallback("JEV unavailable or invalid response; no candidate discarded."); }
+        { return Fallback("JEV unavailable or invalid response; no candidate discarded.", policy, capability, purpose, remoteCalls); }
     }
-    Result Fallback(string reason) => settings.Mode == "required" ? new("REVIEW", new { reason, fallback = "Codex", requiredFailed = true }, 3) : Result.Review(reason);
+    Result Fallback(string reason, JevCapabilityPolicy policy, string capability, string purpose, int remoteCalls)
+        => Decision("REVIEW", new { reason, requiredFailed = settings.Mode == "required" }, policy, capability, purpose, null, false, remoteCalls, "GPT", "fallback", settings.Mode == "required" ? 3 : 0);
+
+    static Result Decision(string status, object judgment, JevCapabilityPolicy policy, string capability, string purpose, double? confidence, bool cached, int remoteCalls, string? fallbackTarget = null, string? escalationReason = null, int exitCode = 0)
+    {
+        var uncertain = status == "REVIEW";
+        return new(status, new
+        {
+            judgment,
+            instrumentation = new
+            {
+                schemaVersion = 1,
+                capability,
+                purpose,
+                privacy = policy.Privacy,
+                budget = new { expectedCalls = policy.ExpectedCalls, maxCalls = policy.MaxCalls },
+                bounds = new { policy.DeterministicFirst, policy.MaxInputBytes, policy.MaxCandidates },
+                counts = new { invocations = 1, remoteCalls, cacheHits = cached ? 1 : 0, fallbacks = fallbackTarget is null ? 0 : 1, escalations = uncertain ? 1 : 0 },
+                confidence = new { reported = confidence, minimum = policy.MinConfidence, uncertain },
+                fallback = new { used = fallbackTarget is not null, target = fallbackTarget },
+                escalation = new { required = uncertain, target = uncertain ? policy.GptEscalation + "-gpt" : null, reason = escalationReason ?? (uncertain ? "uncertain-judgment" : null) },
+                contextAvoidedBytes = 0,
+                payloadCaptured = false
+            }
+        }, exitCode);
+    }
+    public static Result PolicyReview(JevCapabilityPolicy? policy, string capability, string purpose, string reason)
+    {
+        var knownPolicy = policy is not null;
+        policy ??= new() { Allowed = false, Purposes = ["unrecognized"], ExpectedCalls = 0, MaxCalls = 0, MaxInputBytes = 1, MaxCandidates = 0, Privacy = "not-transmitted", MinConfidence = 1 };
+        var safePurpose = knownPolicy && policy.Purposes.Contains(purpose, StringComparer.Ordinal) ? purpose : "unrecognized";
+        return Decision("REVIEW", new { reason }, policy, knownPolicy ? capability : "unrecognized", safePurpose, null, false, 0, "GPT", "policy-gate");
+    }
     static JsonObject CacheResponse(JsonNode response, JsonObject request)
     {
         var answer = response["answers"]!["judgment"]!; var kind = request["questions"]!["judgment"]!["type"]!.GetValue<string>();
@@ -1499,8 +1596,9 @@ public sealed class JevClient
         }
         return new JsonObject { ["answers"] = new JsonObject { ["judgment"] = cached } };
     }
-    public Result Parse(JsonNode response, JsonObject request, bool cached)
+    public Result Parse(JsonNode response, JsonObject request, bool cached, JevCapabilityPolicy? policy = null, string purpose = "candidate-relevance", int remoteCalls = 0, string capability = "relevance")
     {
+        policy ??= DefaultTestPolicy;
         var q = request["questions"]!["judgment"]!; var kind = q["type"]!.GetValue<string>();
         var a = response["answers"]?["judgment"] ?? throw new JsonException("Missing answer.");
         if (a["type"]?.GetValue<string>() != kind) throw new JsonException("Wrong answer type.");
@@ -1509,7 +1607,7 @@ public sealed class JevClient
             var n = a[name]?.GetValue<double>() ?? throw new JsonException("Missing numeric answer.");
             if (!double.IsFinite(n) || n < 0 || n > max) throw new JsonException("Invalid numeric range."); return n;
         }
-        if (kind == "noul") { var n = Number("noul"); return new(Route(n, settings), new { probability = n, cached }); }
+        if (kind == "noul") { var n = Number("noul"); var status = Route(n, settings); return Decision(status, new { probability = n, cached }, policy, capability, purpose, null, cached, remoteCalls, null, status == "REVIEW" ? "uncertain-judgment" : null); }
         var confidence = Number("confidence"); var probabilities = a["probabilities"]?.AsObject() ?? throw new JsonException("Missing probability distribution.");
         var expected = kind == "choice" ? q["criteria"]!.AsObject().Select(x => x.Key).ToArray() : Enumerable.Range(0, q["criteria"]!.AsArray().Count).Select(x => x.ToString(CultureInfo.InvariantCulture)).ToArray();
         if (!expected.Order(StringComparer.Ordinal).SequenceEqual(probabilities.Select(x => x.Key).Order(StringComparer.Ordinal))) throw new JsonException("Wrong probability labels.");
@@ -1531,7 +1629,8 @@ public sealed class JevClient
             if (Math.Abs(score - weighted) > .02) throw new JsonException("Score and distribution disagree.");
             value = score;
         }
-        return new(confidence >= settings.MinConfidence ? "ACCEPT" : "REVIEW", new { value, confidence, cached });
+        var result = confidence >= policy.MinConfidence ? "ACCEPT" : "REVIEW";
+        return Decision(result, new { value, confidence, cached }, policy, capability, purpose, confidence, cached, remoteCalls, null, result == "REVIEW" ? "low-confidence" : null);
     }
 }
 
@@ -1747,8 +1846,12 @@ public static class Validation
             if (instance is not JsonObject value) { errors.Add($"Schema type mismatch: {file} must be object."); return; }
             var properties = schema["properties"]?.AsObject() ?? [];
             foreach (var required in schema["required"]?.AsArray().Select(x => x!.GetValue<string>()) ?? []) if (!value.ContainsKey(required)) errors.Add($"Schema required key missing: {file}:{required}");
-            if (schema["additionalProperties"]?.GetValue<bool>() == false) foreach (var key in value.Select(x => x.Key)) if (!properties.ContainsKey(key)) errors.Add($"Schema unknown key: {file}:{key}");
+            var additional = schema["additionalProperties"];
+            if (additional is JsonValue additionalValue && additionalValue.TryGetValue<bool>(out var allowed) && !allowed)
+                foreach (var key in value.Select(x => x.Key)) if (!properties.ContainsKey(key)) errors.Add($"Schema unknown key: {file}:{key}");
             foreach (var property in properties) if (value[property.Key] is { } child) ValidateSchema(child, property.Value!, file + ":" + property.Key, errors);
+            if (additional is JsonObject additionalSchema)
+                foreach (var property in value.Where(x => !properties.ContainsKey(x.Key) && x.Value is not null)) ValidateSchema(property.Value!, additionalSchema, file + ":" + property.Key, errors);
         }
         else if (schema["type"]?.GetValue<string>() == "array")
         {

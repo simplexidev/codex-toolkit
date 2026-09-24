@@ -24,7 +24,8 @@ observable behavior before proposing tests. Coverage-backed risk ranking may
 combine exact counters with code reasoning, but mutation/CRAP analysis is
 separate and opt-in.
 
-JEV may rank a large sanitized list of already-computed candidate gaps. It must
+JEV capability `relevance` with purpose `coverage-gap-ranking` may rank a large
+sanitized list of already-computed candidate gaps. It must
 not parse reports, calculate percentages, set thresholds, or decide whether a
 behavior is adequately tested. Keep raw reports local and pass only bounded
 summaries to models.
