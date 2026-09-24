@@ -9,4 +9,5 @@ security, concurrency, resource lifetimes, public API compatibility and missing 
 Give concrete triggering conditions and file/line evidence. Avoid style-only feedback.
 Use deterministic checks before inference. Do not change files or merge. Report no
 findings when none are supported; distinguish unverified risks from demonstrated bugs.
+Do not delegate, spawn subagents, or request further reviews; return one independent result.
 """

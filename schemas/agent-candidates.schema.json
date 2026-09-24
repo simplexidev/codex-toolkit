@@ -37,11 +37,12 @@
     "policy": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["hierarchy", "productionChanges", "runtimeDefaultExclusions", "decisionVocabulary"],
+      "required": ["hierarchy", "productionChanges", "runtimeDefaultExclusions", "decisionVocabulary", "delegation"],
       "properties": {
         "hierarchy": { "const": ["deterministic", "jev", "agent", "stronger-agent"] },
         "productionChanges": { "const": "none" },
         "runtimeDefaultExclusions": { "type": "array", "contains": { "const": "eval-judge" } },
+        "delegation": { "const": "root-only; delegated agents must not delegate" },
         "decisionVocabulary": {
           "const": ["KEEP", "MODIFY", "RETIRE", "REPLACE_WITH_BUILTIN", "EVALUATE_FOR_ADD", "INSUFFICIENT_EVIDENCE"]
         }
@@ -53,7 +54,7 @@
       "required": ["id", "kind", "locator", "supports"],
       "properties": {
         "id": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
-        "kind": { "enum": ["installed-cli", "runtime-surface", "repository", "git-history", "official-docs"] },
+        "kind": { "enum": ["installed-cli", "runtime-surface", "repository", "git-history", "official-docs", "metrics"] },
         "locator": { "type": "string", "minLength": 1 },
         "supports": { "$ref": "#/$defs/stringArray" }
       }

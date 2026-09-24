@@ -29,7 +29,7 @@ Routing and metrics consumers use the versioned capability inventory in
   repo-health, reproducible-build, roadmap-next, sbom, security-scan,
   test-quality, and versioning. Each has narrow activation metadata and an eval fixture.
 - Custom agents (1): `reviewer`, a read-only, evidence-backed reviewer for requested or
-  substantial high-risk diffs.
+  substantial high-risk diffs. Delegation is root-only: this reviewer never delegates.
 - AgentTool command groups (37 commands): lifecycle (`install`, `update`, `uninstall`,
   `doctor`); Git/GitHub (`git state`, `git prepare-commit`, `git issue-start`,
   `github prepare-pr`, `github pr-status`, `github review-comments`); repository
