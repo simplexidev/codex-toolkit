@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Adds conservative per-capability JEV call budgets, deterministic-first and privacy
+  gates, GPT escalation, and payload-free routing instrumentation.
 - Adds a schema-validated agent audit and metrics handoff covering current, retired,
   native-comparator, and proposed roles without installing new production agents.
 - Adds bounded GitHub Actions run/job/failed-log inspection with one compact CI

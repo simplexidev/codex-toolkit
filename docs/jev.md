@@ -17,10 +17,20 @@ required reports exit 3 on service failure while still marking the result REVIEW
 Uncertain valid judgments remain REVIEW. No retries can accidentally multiply billing.
 Redirects are disabled to avoid forwarding credentials to another endpoint.
 
-Create a small sanitized JSON input:
+Every invocation declares a configured capability and purpose. Policies default to zero
+expected calls so JEV is never an always-on tax; a positive maximum is a hard per-command
+budget, not a target. Policies also bound bytes/candidates, require deterministic narrowing,
+and choose normal or stronger GPT escalation. Unknown purposes and disallowed capabilities
+remain local and return REVIEW without HTTP. The allowed capability families are relevance,
+PR/SARIF triage, bounded failure/upstream classification, and genuinely ambiguous routing.
+Exact repository/Git/dependency facts, exact commands, authorization/security dispositions,
+code generation, architecture, and open-ended debugging are explicitly disallowed.
+
+Create a small sanitized JSON input. `capability`, `purpose`, and
+`deterministicNarrowed` are local routing metadata and are not sent to JEV:
 
 ```json
-{"state":"README describes build setup","instructions":"Is this relevant to build documentation?"}
+{"capability":"relevance","purpose":"docs-impact","deterministicNarrowed":true,"state":"README describes build setup","instructions":"Is this relevant to build documentation?"}
 ```
 
 Run dotnet tools/AgentTool.cs jev noul --input safe.json --dry-run.
@@ -28,7 +38,8 @@ To transmit this exact reviewed input, omit --dry-run and add --safe-input. This
 asserts caller review of the payload, not a guarantee of automated secret detection.
 Never send .env content, credentials, complete private repositories or oversized excerpts.
 Choice adds a criteria object mapping labels to descriptions. Score adds an ordered
-criteria array. Screen accepts query plus candidates with id and text and returns an
+criteria array. Screen accepts the same local routing metadata plus query and candidates
+with id and text, and returns an
 individual judgment for every candidate. Query, ids and text must be non-empty strings; ids containing a detected secret are refused before any request,
 and ids must be unique; malformed screen input keeps every candidate for review. Narrow
 candidates before screening.
@@ -36,6 +47,13 @@ candidates before screening.
 Noul relevance >= .70 is INCLUDE, <= .10 is EXCLUDE, everything else REVIEW.
 Choice/Score require confidence >= .80. Open INCLUDE and REVIEW items. These heuristics
 need task-specific evaluation; never use them for security authorization or exact facts.
+
+Live results include structured `instrumentation` with capability/purpose, expected and
+maximum calls, counts, reported/minimum confidence, fallback and GPT escalation state,
+and `contextAvoidedBytes`. Screening counts bytes only for EXCLUDE candidate text. The
+instrumentation sets `payloadCaptured` false and never contains request text, responses,
+credentials, or secrets. Dry-run intentionally displays the reviewed outbound request;
+it is not an instrumentation log.
 
 Cache hashes include canonical request and endpoint; files contain responses only,
 never requests or keys. Default TTL is 24 hours. Set cacheHours to 0 to disable; remove
