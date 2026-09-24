@@ -45,7 +45,7 @@ public static class AgentTool
         test-results summarize --file PATH | coverage summarize --file PATH
         jev noul|choice|score --input PATH [--dry-run] [--safe-input]
         jev screen --input PATH [--dry-run] [--safe-input] | cache-clear
-        upstream status | update [--dry-run]
+        upstream status | update [--dry-run] | dotnet-skills <status|diff|check> [--dry-run]
         validate | eval [--skill NAME] [--results PATH] | release --output ZIP
         results init | new <audit|handoff|review|report> <name>
         results list [audit|handoff|review|report] [--json] | latest <type> [--json]
@@ -66,7 +66,7 @@ public static class AgentTool
             if (c.Flag("help") || c.Words.Count == 0 || c.Words[0] == "help") { Console.WriteLine(Help); return 0; }
             var toolkit = FindToolkit(c.Get("toolkit"));
             var root = Path.GetFullPath(c.Get("root") ?? Environment.CurrentDirectory);
-            var command = c.Words.FirstOrDefault() == "results" ? string.Join(' ', c.Words.Take(2)) : string.Join(' ', c.Words);
+            var command = c.Words.FirstOrDefault() is "results" ? string.Join(' ', c.Words.Take(2)) : c.Words.FirstOrDefault() == "upstream" && c.Words.ElementAtOrDefault(1) == "dotnet-skills" ? string.Join(' ', c.Words.Take(2)) : string.Join(' ', c.Words);
             var settings = Settings.LoadFor(toolkit, command);
             var result = await Execute(c, toolkit, root, settings);
             Console.WriteLine(Render(result, root, settings.Output));
@@ -107,7 +107,7 @@ public static class AgentTool
 
     public static async Task<Result> Execute(Cli c, string toolkit, string root, Settings settings)
     {
-        var command = c.Words.FirstOrDefault() == "results" ? string.Join(' ', c.Words.Take(2)) : string.Join(' ', c.Words);
+        var command = c.Words.FirstOrDefault() is "results" ? string.Join(' ', c.Words.Take(2)) : c.Words.FirstOrDefault() == "upstream" && c.Words.ElementAtOrDefault(1) == "dotnet-skills" ? string.Join(' ', c.Words.Take(2)) : string.Join(' ', c.Words);
         c.ValidateCommand(command);
         var artifacts = Path.Combine(root, ".agent-tool");
         switch (command)
@@ -180,6 +180,7 @@ public static class AgentTool
                 return Result.Ok(new { cleared = cachePath });
             case "upstream status": return Result.Ok(new { plugins = JsonNode.Parse(File.ReadAllText(Path.Combine(toolkit, "upstream/dotnet-skills.json"))), tools = JsonNode.Parse(File.ReadAllText(Path.Combine(toolkit, "upstream/tools.json"))), versions = JsonNode.Parse(File.ReadAllText(Path.Combine(toolkit, "upstream/versions.json"))) });
             case "upstream update": return await Upstream(toolkit, artifacts, c.Flag("dry-run"));
+            case "upstream dotnet-skills": return await DotnetSkillsDrift.Run(toolkit, artifacts, c.Words.Skip(2).SingleOrDefault(), c.Flag("dry-run"));
             case "validate": return Validation.Run(toolkit);
             case "eval": return Evaluation.Run(toolkit, c.Get("skill"), c.Get("results"));
             case "release": return Release(toolkit, c.Require("output"));
@@ -403,6 +404,55 @@ public record Result(string Status, object? Data, int ExitCode = 0)
 public record ProcessReport(int ProcessExitCode, object Summary, string Artifact);
 public record ProcessResult(int ExitCode, string Output);
 
+public static class DotnetSkillsDrift
+{
+    // This compares only public Git metadata. It deliberately never checks out, runs, or imports upstream files.
+    public static async Task<Result> Run(string toolkit, string artifacts, string? operation, bool dryRun)
+    {
+        if (operation is not ("status" or "diff" or "check")) throw new ArgumentException("Usage: upstream dotnet-skills <status|diff|check> [--dry-run].");
+        var manifest = JsonNode.Parse(File.ReadAllText(Path.Combine(toolkit, "upstream/dotnet-skills.json"))) ?? throw new FormatException("Dotnet skills provenance manifest is empty.");
+        var snapshot = manifest["snapshot"]?.AsObject() ?? throw new FormatException("Dotnet skills provenance snapshot is missing.");
+        var repository = Required(snapshot, "repository"); var pinned = Required(snapshot, "commit");
+        if (operation == "status")
+        {
+            if (dryRun) return Result.Ok(new { kind = "dotnet-skills-status", repository, pinned, query = $"gh api repos/{repository}/commits/HEAD --jq .sha", policy = "Public metadata only; no source is downloaded or executed." });
+            var head = await Processes.Run("gh", ["api", $"repos/{repository}/commits/HEAD", "--jq", ".sha"], toolkit);
+            return new(head.ExitCode == 0 ? "ok" : "unavailable", new { kind = "dotnet-skills-status", repository, pinned, latest = head.ExitCode == 0 ? head.Output.Trim() : null, status = head.ExitCode == 0 && head.Output.Trim() == pinned ? "current" : "review-update", policy = "Public metadata only; no source is downloaded or executed." }, head.ExitCode == 0 ? 0 : 1);
+        }
+        if (dryRun) return Result.Ok(new { kind = "dotnet-skills-diff", repository, pinned, query = $"gh api repos/{repository}/compare/{pinned}...HEAD", policy = "Only changed decision paths are reported; no upstream code is executed, merged, or copied." });
+        var response = await Processes.Run("gh", ["api", $"repos/{repository}/compare/{pinned}...HEAD"], toolkit);
+        if (response.ExitCode != 0) return new("unavailable", new { kind = "dotnet-skills-diff", repository, pinned, policy = "Comparison unavailable; no source was downloaded or executed." }, 1);
+        var analysis = Analyze(manifest, JsonNode.Parse(response.Output) ?? throw new FormatException("Upstream comparison is empty."));
+        SafeFiles.NoLinks(artifacts); Directory.CreateDirectory(artifacts);
+        var report = Path.Combine(artifacts, "dotnet-skills-drift.json"); SafeFiles.Atomic(report, JsonSerializer.Serialize(analysis, AgentTool.Json));
+        var review = analysis["classification"]?.GetValue<string>() is "relevant" or "review-required";
+        return new(review && operation == "check" ? "review-required" : "ok", new { kind = "dotnet-skills-drift", analysis, report, policy = "Report only. Review listed public paths before any separate, explicit integration change." }, review && operation == "check" ? 1 : 0);
+    }
+
+    public static JsonObject Analyze(JsonNode manifest, JsonNode authoritative)
+    {
+        var snapshot = manifest["snapshot"]?.AsObject() ?? throw new FormatException("Provenance snapshot is missing.");
+        var repository = Required(snapshot, "repository"); var pinned = Required(snapshot, "commit");
+        var files = authoritative["files"]?.AsArray() ?? throw new FormatException("Authoritative comparison has no files array.");
+        var paths = manifest["decisions"]?.AsArray().SelectMany(d => d?["upstreamPaths"]?.AsArray() ?? throw new FormatException("Decision has no upstreamPaths.")).Select(p => p?.GetValue<string>() ?? throw new FormatException("Decision path is invalid.")).ToHashSet(StringComparer.Ordinal) ?? throw new FormatException("Provenance decisions are missing.");
+        var relevant = new JsonArray(); var irrelevant = 0;
+        foreach (var item in files)
+        {
+            var file = item?.AsObject() ?? throw new FormatException("Authoritative comparison file is invalid.");
+            var path = Required(file, "filename"); var status = Required(file, "status");
+            if (status is not ("added" or "modified" or "removed" or "renamed")) throw new FormatException("Authoritative comparison has an unknown file status.");
+            var previous = file["previous_filename"]?.GetValue<string>();
+            if (!paths.Contains(path) && (previous is null || !paths.Contains(previous))) { irrelevant++; continue; }
+            var disposition = status is "removed" or "renamed" ? "review-required" : "relevant";
+            relevant.Add(new JsonObject { ["path"] = path, ["status"] = status, ["previousPath"] = previous, ["classification"] = disposition, ["inspect"] = "Fetch this one public path only if a maintainer needs its diff." });
+        }
+        var classification = relevant.Count == 0 ? (files.Count == 0 ? "no-change" : "irrelevant") : relevant.Any(f => f!["classification"]!.GetValue<string>() == "review-required") ? "review-required" : "relevant";
+        return new JsonObject { ["schemaVersion"] = 1, ["kind"] = "dotnet-skills-drift", ["repository"] = repository, ["pinned"] = pinned, ["authoritativeHead"] = authoritative["head_commit"]?["sha"]?.GetValue<string>(), ["classification"] = classification, ["changedFiles"] = files.Count, ["relevant"] = relevant, ["irrelevantCount"] = irrelevant, ["automaticAction"] = "none" };
+    }
+
+    static string Required(JsonObject value, string name) => value[name]?.GetValue<string>() is { Length: > 0 } text ? text : throw new FormatException($"Missing {name}.");
+}
+
 public sealed class Cli
 {
     public void ValidateCommand(string command)
@@ -430,7 +480,7 @@ public sealed class Cli
             "sarif summarize" => ["file", "baseline"],
             "artifact verify" => ["file", "sha256"],
             "jev noul" or "jev choice" or "jev score" or "jev screen" => ["input", "dry-run", "safe-input"],
-            "upstream update" => ["dry-run"],
+            "upstream update" or "upstream dotnet-skills" => ["dry-run"],
             "eval" => ["skill", "results"],
             "release" => ["output"],
             "results clean" => ["dry-run"],
@@ -1472,7 +1522,7 @@ public record Settings(JevSettings Jev, OutputSettings Output, HealthSettings He
         return new(jev, output, Read<HealthSettings>("repo-health"), Read<ToolkitSettings>("toolkit"));
     }
     public static Settings LoadFor(string toolkit, string command)
-        => command is "install" or "update" or "uninstall" or "validate" or "release" or "results init" or "results new" or "results list" or "results latest" or "results context" or "results clean" or "upstream status" or "upstream update"
+        => command is "install" or "update" or "uninstall" or "validate" or "release" or "results init" or "results new" or "results list" or "results latest" or "results context" or "results clean" or "upstream status" or "upstream update" or "upstream dotnet-skills"
             ? new(new(), new(), new(), new()) : Load(toolkit);
 }
 
