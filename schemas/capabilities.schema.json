@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "codex-toolkit capability manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "manifestVersion", "owner", "generatedFrom", "layerOrder", "summary", "capabilities"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "manifestVersion": { "const": 1 },
+    "owner": { "const": "simplexidev/codex-toolkit" },
+    "generatedFrom": { "type": "string", "minLength": 1 },
+    "layerOrder": {
+      "const": ["deterministic", "jev", "agent", "stronger-agent"]
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["total", "supported", "partial", "gap"],
+      "properties": {
+        "total": { "type": "integer", "minimum": 1 },
+        "supported": { "type": "integer", "minimum": 0 },
+        "partial": { "type": "integer", "minimum": 0 },
+        "gap": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "capabilities": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/capability" }
+    }
+  },
+  "$defs": {
+    "support": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id", "scope"],
+      "properties": {
+        "kind": { "enum": ["agent-tool", "skill", "agent", "workflow", "config", "template", "upstream", "platform", "none"] },
+        "id": { "type": "string", "minLength": 1 },
+        "scope": { "type": "string", "minLength": 1 }
+      }
+    },
+    "opportunity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["deterministic", "jev", "agent"],
+      "properties": {
+        "deterministic": { "type": "string", "minLength": 1 },
+        "jev": { "type": "string", "minLength": 1 },
+        "agent": { "type": "string", "minLength": 1 }
+      }
+    },
+    "routing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["primary", "fallback", "reason"],
+      "properties": {
+        "primary": { "enum": ["deterministic", "jev", "agent", "stronger-agent"] },
+        "fallback": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "enum": ["deterministic", "jev", "agent", "stronger-agent"] }
+        },
+        "reason": { "type": "string", "minLength": 1 }
+      }
+    },
+    "staticCost": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["level", "activation", "loads", "concern"],
+      "properties": {
+        "level": { "enum": ["none", "low", "medium", "high"] },
+        "activation": { "enum": ["none", "implicit", "explicit", "platform"] },
+        "loads": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "concern": { "type": "string", "minLength": 1 }
+      }
+    },
+    "capability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "tasks", "coverage", "existingSupport", "opportunities", "routing", "staticCost", "gaps", "duplication", "recommendedAction"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+        "title": { "type": "string", "minLength": 1 },
+        "tasks": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+        "coverage": { "enum": ["supported", "partial", "gap"] },
+        "existingSupport": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/support" } },
+        "opportunities": { "$ref": "#/$defs/opportunity" },
+        "routing": { "$ref": "#/$defs/routing" },
+        "staticCost": { "$ref": "#/$defs/staticCost" },
+        "gaps": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "duplication": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "recommendedAction": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

@@ -32,7 +32,7 @@ public class JevIntegrationValidationTests
         using var repo = new TemporaryGitRepository();
         var input = Path.Combine(repo.Root, "screen.json");
         File.WriteAllText(input, """
-            {"query":"build documentation","candidates":[
+            {"capability":"relevance","purpose":"docs-impact","deterministicNarrowed":true,"query":"build documentation","candidates":[
               {"id":"README.md","text":"Build prerequisites and test commands."},
               {"id":"art.txt","text":"Public color palette notes."}
             ]}
@@ -40,8 +40,9 @@ public class JevIntegrationValidationTests
 
         var result = await AgentTool.Execute(
             Cli.Parse(["jev", "screen", "--input", input, "--dry-run"]),
-            AgentTool.FindToolkit(), repo.Root, new(new(), new(), new(), new()));
-        var rows = JsonSerializer.SerializeToNode(result.Data, AgentTool.Json)!.AsArray();
+            AgentTool.FindToolkit(), repo.Root, Settings.Load(AgentTool.FindToolkit(), _ => null));
+        var data = JsonSerializer.SerializeToNode(result.Data, AgentTool.Json)!;
+        var rows = data["judgments"]!.AsArray();
 
         Assert.Equal("ok", result.Status);
         Assert.Equal(2, rows.Count);
@@ -66,11 +67,19 @@ public class JevIntegrationValidationTests
     {
         using var repo = new TemporaryGitRepository();
         var input = Path.Combine(repo.Root, "screen.json");
+        var parsed = JsonNode.Parse(json);
+        if (parsed is JsonObject obj)
+        {
+            obj["capability"] = "relevance";
+            obj["purpose"] = "candidate-relevance";
+            obj["deterministicNarrowed"] = true;
+            json = obj.ToJsonString();
+        }
         File.WriteAllText(input, json);
 
         var result = await AgentTool.Execute(
             Cli.Parse(["jev", "screen", "--input", input, "--dry-run"]),
-            AgentTool.FindToolkit(), repo.Root, new(new(), new(), new(), new()));
+            AgentTool.FindToolkit(), repo.Root, Settings.Load(AgentTool.FindToolkit(), _ => null));
 
         Assert.Equal("REVIEW", result.Status);
         Assert.Contains("no candidate discarded", JsonSerializer.Serialize(result, AgentTool.Json), StringComparison.Ordinal);
@@ -81,8 +90,9 @@ public class JevIntegrationValidationTests
     {
         using var repo = new TemporaryGitRepository();
         var input = Path.Combine(repo.Root, "screen.json");
-        File.WriteAllText(input, "{\"query\":\"relevant?\",\"candidates\":[{\"id\":\"a\",\"text\":\"safe\"},{\"id\":\"b\",\"text\":\"safe\"}]}");
-        var settings = new Settings(new() { MaxCandidates = 1 }, new(), new(), new());
+        File.WriteAllText(input, "{\"capability\":\"relevance\",\"purpose\":\"candidate-relevance\",\"deterministicNarrowed\":true,\"query\":\"relevant?\",\"candidates\":[{\"id\":\"a\",\"text\":\"safe\"},{\"id\":\"b\",\"text\":\"safe\"}]}");
+        var loaded = Settings.Load(AgentTool.FindToolkit(), _ => null);
+        var settings = loaded with { Jev = loaded.Jev with { MaxCandidates = 1 } };
 
         var result = await AgentTool.Execute(
             Cli.Parse(["jev", "screen", "--input", input, "--dry-run"]),

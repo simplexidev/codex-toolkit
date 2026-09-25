@@ -1,6 +1,0 @@
-interface:
-  display_name: "Dotnet Verify"
-  short_description: Validate a .NET change using affected project and test dependencies.
-  default_prompt: "Use $dotnet-verify."
-policy:
-  allow_implicit_invocation: true

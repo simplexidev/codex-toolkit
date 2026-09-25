@@ -1,8 +1,8 @@
 ---
 name: repo-health
-description: Audit repository build and .NET configuration against toolkit policy.
+description: Audit repository configuration and evidence-backed hygiene candidates.
 ---
 
 # Repo Health
 
-Run `repo health`; inspect evaluated properties for framework, nullable, central packages, analyzers, deterministic builds and optional lock files. Read config/repo-health.json from the toolkit for policy. Report findings with actual versus expected values; propose targeted changes. Do not impose optional release tooling or silently edit policy to obtain a pass.
+Run `repo health` for evaluated .NET policy and `repo hygiene` for tracked generated/output/temporary candidates. Inspect the evidence for each candidate before recommending cleanup; the report does not establish that a generated file is unused and never deletes it. Read config/repo-health.json for configured build policy. Report actual versus expected values and propose targeted changes without imposing optional release tooling or weakening policy to obtain a pass.

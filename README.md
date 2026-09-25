@@ -1,12 +1,19 @@
 # codex-toolkit
 
-A central Codex toolkit with 24 focused skills, one native agent and one .NET 10
-file-based utility. Prefer **deterministic tools → bounded JEV judgment → Codex**:
-compute exact facts cheaply, preserve uncertainty, reserve reasoning for real problems.
+The runtime product for the Codex Toolkit: one unified plugin, one project template,
+AgentTool, runtime skills and references, and one evidence-backed native agent. The
+toolkit prefers deterministic tooling, then bounded JEV judgment, then Codex reasoning.
 
-## Start
+Human documentation lives in
+[`simplexidev/codex-toolkit-docs`](https://github.com/simplexidev/codex-toolkit-docs).
+Start with its [installation guide](https://github.com/simplexidev/codex-toolkit-docs/blob/main/docs/getting-started/install.md),
+then see [usage and configuration](https://github.com/simplexidev/codex-toolkit-docs/tree/main/docs/guides),
+the [reference](https://github.com/simplexidev/codex-toolkit-docs/tree/main/docs/reference),
+and [troubleshooting](https://github.com/simplexidev/codex-toolkit-docs/tree/main/docs/troubleshooting).
 
-Requires .NET 10 SDK and Git. From this checkout:
+## Quick start
+
+Requires the .NET 10 SDK and Git. From this checkout:
 
 ```text
 dotnet tools/AgentTool.cs install --dry-run
@@ -14,43 +21,30 @@ dotnet tools/AgentTool.cs install --bin
 dotnet tools/AgentTool.cs doctor
 ```
 
-Installation links instructions, skills and agents without overwriting user configuration.
-After updating the checkout, run `dotnet tools/AgentTool.cs update`. Remove owned links
-with `dotnet tools/AgentTool.cs uninstall`. [Installation details](docs/installation.md).
+AgentTool installs links without overwriting user configuration. It never commits,
+pushes, merges, or creates remote repositories. Run `dotnet tools/AgentTool.cs help`
+for the bounded command surface.
 
-## Common commands
+JEV is optional. Its compact, agent-consumed operating reference remains product-local
+at [docs/jev.md](docs/jev.md); broader explanation belongs in the human
+[JEV documentation](https://github.com/simplexidev/codex-toolkit-docs/blob/main/docs/concepts/jev.md).
+Runtime skills never depend on the documentation repository.
 
-```text
-dotnet tools/AgentTool.cs repo changed-files
-dotnet tools/AgentTool.cs repo affected-projects --base main
-dotnet tools/AgentTool.cs -- dotnet verify --project tests/MyTests.csproj
-dotnet tools/AgentTool.cs -- logs summarize --file build.log
-dotnet tools/AgentTool.cs git prepare-commit
-dotnet tools/AgentTool.cs results init
-dotnet tools/AgentTool.cs results new handoff phase-1
-dotnet tools/AgentTool.cs results context handoff
-dotnet tools/AgentTool.cs help
-```
+## Repository map
 
-Output is compact JSON in both default and --json modes. Full command logs are stored
-in ignored .agent-tool/. The utility never commits, pushes, merges or creates remote
-repositories. Branch creation checks clean Git state and open issue status.
+- `tools/AgentTool.cs` — the .NET 10 file-based runtime utility.
+- `plugins/codex-toolkit/` — the unified plugin, skills, and runtime references.
+- `templates/project/` — the project integration template.
+- `agents/` and `global/` — native-agent and installed instruction definitions.
+- `config/` and `schemas/` — runtime policy and validated configuration.
+- `tests/` and `evals/` — automated checks and smoke evaluation inputs.
 
-## Durable agent results
+For architecture, security, examples, development, and contributor guidance, use the
+[human documentation repository](https://github.com/simplexidev/codex-toolkit-docs).
+Release history stays canonical in [CHANGELOG.md](CHANGELOG.md), and vulnerability
+reporting guidance remains in [SECURITY.md](SECURITY.md).
 
-`results init` creates `.agent-results/`: durable audits, handoffs, reviews, and reports are tracked; generated evaluations, logs, traces, SARIF, binlogs, test results, and temporary files are ignored. Normal discovery deliberately skips this store. Use it only for non-obvious state that needs to cross independent chats, and link large evidence by path instead of copying it into a handoff.
-
-JEV is optional: inject `TYPESAFE_API_KEY` only into the specific AgentTool process or
-session used for live JEV work; storage and injection remain outside this toolkit. Inspect a sanitized input
-with `jev noul --input safe.json --dry-run`, and explicitly mark reviewed input with
---safe-input before transmission. Failures/uncertainty return REVIEW for Codex.
-[JEV setup](docs/jev.md) · [Configuration](docs/configuration.md)
-
-Use small project-local instructions from [templates/project](templates/project/AGENTS.md)
-for target-specific rules. [Project integration](docs/project-integration.md).
-Official .NET integrations are references, never vendored: [upstream policy](docs/upstream-integrations.md).
-
-## Development
+## Validate
 
 ```text
 dotnet test tests/AgentTool.Tests/AgentTool.Tests.csproj
@@ -58,10 +52,5 @@ dotnet tools/AgentTool.cs validate
 dotnet tools/AgentTool.cs eval
 ```
 
-Tests cover real Git repositories, fake HTTP, temporary-home installation and metadata.
-Offline evals are smoke checks; measured agent/token comparisons are separate
-[regression inputs](docs/evaluation.md). No live billable JEV tests.
-
-The bootstrap intentionally leaves optional tool installation, full binlog interpretation,
-project-specific SBOM/API/reproducibility gates and billable skill evaluations on demand.
-[Architecture](docs/architecture.md) · [Security](docs/security.md) · [Troubleshooting](docs/troubleshooting.md)
+Tests use temporary homes and fake JEV HTTP responses. Normal validation makes no live,
+billable JEV call.

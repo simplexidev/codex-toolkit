@@ -1,0 +1,23 @@
+{
+  "$schema": "../schemas/agent-tool-contracts.schema.json",
+  "manifestVersion": 1,
+  "contracts": [
+    { "command": "repo summary", "kind": "repository-summary", "schemaVersion": 1, "mode": "summary" },
+    { "command": "repo hygiene", "kind": "repository-hygiene", "schemaVersion": 1, "mode": "summary" },
+    { "command": "git summary", "kind": "repository-summary", "schemaVersion": 1, "mode": "summary" },
+    { "command": "git conflict-forecast", "kind": "git-conflict-forecast", "schemaVersion": 1, "mode": "facts" },
+    { "command": "github actions", "kind": "github-actions-summary", "schemaVersion": 1, "mode": "summary" },
+    { "command": "repo ownership", "kind": "file-ownership", "schemaVersion": 1, "mode": "facts" },
+    { "command": "dotnet inspect", "kind": "dotnet-inspection", "schemaVersion": 1, "mode": "facts" },
+    { "command": "dotnet build-plan", "kind": "dotnet-build-plan", "schemaVersion": 1, "mode": "plan" },
+    { "command": "dotnet test-plan", "kind": "dotnet-test-plan", "schemaVersion": 1, "mode": "plan" },
+    { "command": "dotnet diagnostics-plan", "kind": "dotnet-diagnostics-plan", "schemaVersion": 1, "mode": "plan" },
+    { "command": "dotnet dependencies", "kind": "dependency-inventory", "schemaVersion": 1, "mode": "facts" },
+    { "command": "test-results summarize", "kind": "test-results", "schemaVersion": 1, "mode": "summary" },
+    { "command": "coverage summarize", "kind": "coverage-summary", "schemaVersion": 1, "mode": "summary" },
+    { "command": "sarif summarize", "kind": "sarif-summary", "schemaVersion": 1, "mode": "summary" },
+    { "command": "artifact inspect", "kind": "artifact-inspection", "schemaVersion": 1, "mode": "facts" },
+    { "command": "artifact verify", "kind": "artifact-verification", "schemaVersion": 1, "mode": "facts" },
+    { "command": "upstream dotnet-skills", "kind": "dotnet-skills-drift", "schemaVersion": 1, "mode": "summary" }
+  ]
+}

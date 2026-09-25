@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TestRun xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010">
+  <Results>
+    <UnitTestResult testName="passes" outcome="Passed" duration="00:00:00.125" />
+    <UnitTestResult testName="fails" outcome="Failed" duration="00:00:00.375">
+      <Output><ErrorInfo><Message>expected true but was false</Message></ErrorInfo></Output>
+    </UnitTestResult>
+    <UnitTestResult testName="skips" outcome="NotExecuted" duration="00:00:00" />
+  </Results>
+</TestRun>

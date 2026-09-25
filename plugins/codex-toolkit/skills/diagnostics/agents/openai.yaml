@@ -1,6 +1,0 @@
-interface:
-  display_name: "Diagnostics"
-  short_description: Collect or inspect .NET runtime counters, traces, dumps or GC artifacts for a reported issue.
-  default_prompt: "Use $diagnostics."
-policy:
-  allow_implicit_invocation: true

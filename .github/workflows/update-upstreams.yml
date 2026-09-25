@@ -2,7 +2,7 @@ name: Report upstream drift
 on:
   workflow_dispatch:
   schedule:
-    - cron: '13 9 * * 1'
+    - cron: '13 9 1 * *'
 permissions:
   contents: read
 jobs:
@@ -17,9 +17,20 @@ jobs:
       - run: dotnet tools/AgentTool.cs upstream update
         env:
           GH_TOKEN: ${{ github.token }}
+      - run: dotnet tools/AgentTool.cs upstream dotnet-skills check
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
       - uses: actions/upload-artifact@v7
         with:
           name: upstream-drift
           path: .agent-tool/upstream-drift.json
+          include-hidden-files: true
+          retention-days: 30
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: dotnet-skills-drift
+          path: .agent-tool/dotnet-skills-drift.json
           include-hidden-files: true
           retention-days: 30

@@ -1,0 +1,7 @@
+{
+  "project": "src/App/App.csproj",
+  "baselineSeconds": 18.4,
+  "regressedSeconds": 31.7,
+  "workload": "incremental no-op build",
+  "structuredFinding": "evaluation time increased by repeated item expansion"
+}

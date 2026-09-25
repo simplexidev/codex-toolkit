@@ -1,0 +1,5 @@
+{
+  "framework": "xunit-v3",
+  "contract": "Malformed input returns a structured failure without changing parser state.",
+  "nearbyConvention": "Fact methods use Assert.False and Assert.Equal on the returned result."
+}

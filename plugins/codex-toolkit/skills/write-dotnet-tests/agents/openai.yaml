@@ -1,0 +1,6 @@
+interface:
+  display_name: "Write Dotnet Tests"
+  short_description: Add focused .NET tests in the repository's existing style.
+  default_prompt: "Use $write-dotnet-tests."
+policy:
+  allow_implicit_invocation: true

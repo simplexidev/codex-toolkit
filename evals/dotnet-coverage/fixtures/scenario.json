@@ -1,0 +1,6 @@
+{
+  "format": "cobertura",
+  "coveredLines": 75,
+  "validLines": 100,
+  "conditionCoverage": "50% (1/2)"
+}

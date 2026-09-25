@@ -1,0 +1,6 @@
+interface:
+  display_name: "Investigate .NET Performance"
+  short_description: Investigate an observed .NET latency, throughput, CPU, allocation, or memory regression.
+  default_prompt: "Use $investigate-dotnet-performance."
+policy:
+  allow_implicit_invocation: true

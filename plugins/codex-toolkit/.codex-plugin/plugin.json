@@ -1,6 +1,6 @@
 {
   "name": "codex-toolkit",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Token-efficient Codex workflows backed by a single .NET utility.",
   "author": {
     "name": "codex-toolkit contributors"

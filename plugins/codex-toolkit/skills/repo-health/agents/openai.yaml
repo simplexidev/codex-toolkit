@@ -1,6 +1,6 @@
 interface:
   display_name: "Repo Health"
-  short_description: Audit repository build and .NET configuration against toolkit policy.
+  short_description: "Audit repository configuration and hygiene"
   default_prompt: "Use $repo-health."
 policy:
   allow_implicit_invocation: true
