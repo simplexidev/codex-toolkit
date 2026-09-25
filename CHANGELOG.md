@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.0.0
 
 - Adds conservative per-capability JEV call budgets, deterministic-first and privacy
   gates, GPT escalation, and payload-free routing instrumentation.

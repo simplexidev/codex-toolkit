@@ -33,10 +33,10 @@ public class MetadataTests
         }
     }
     [Fact]
-    public void ReleaseIdentityIsOnePointZero()
+    public void ReleaseIdentityIsTwoPointZero()
     {
         var config = JsonNode.Parse(File.ReadAllText(Path.Combine(Root, "config/toolkit.json")))!;
-        Assert.Equal("1.0.0", config["version"]!.GetValue<string>());
+        Assert.Equal("2.0.0", config["version"]!.GetValue<string>());
         Assert.Equal(0, Validation.Run(Root).ExitCode);
     }
     [Fact]
